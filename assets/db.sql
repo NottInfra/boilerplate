@@ -1,0 +1,1 @@
+-- Project schema bootstrap (apply-db runs this after ensuring the database exists)

@@ -1,0 +1,15 @@
+# Git
+.git
+.gitignore
+.github/
+
+# Logs
+*.log
+
+# Env files
+.env
+.env.*
+
+# Docker files themselves
+Dockerfile
+.dockerignore
