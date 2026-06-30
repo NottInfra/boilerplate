@@ -1,8 +1,10 @@
 # Operations
 
-`/cmd` is PowerShell. Apply scripts dot-source only the `cmd/lib/*.ps1` files they need.
+`/cmd` and `/release` are separate — each dotsources only its own `lib/*.ps1` (no cross-imports).
 
-## Scripts
+Env template: [`.env.example`](../../.env.example) → copy to `.env.development`, `.env.test`, or `.env.production`.
+
+## Apply scripts (`/cmd`)
 
 | Script | Purpose |
 |--------|---------|
@@ -17,25 +19,23 @@
 | `apply-dns.ps1` | Apply `public.dns.*` A records via Spaceship API |
 | `refresh-boilerplate.ps1` | Soft-pull boilerplate updates |
 
-## Lib classes (`cmd/lib/`)
+## Release pipeline (`/release`)
 
-| Class | Init | Role |
-|-------|------|------|
-| `Env` | `$Root` | Load/pick env file; sets `ENV` |
-| `Cfg` | `$FilePath` | Parse `boilerplate.cfg` (or any cfg file) |
-| `Project` | `$FilePath` | Parse `project.yml` for current `ENV` |
-| `Vault` | reads `VAULT_*` from env | Vault API |
-| `GitRemote` | `$Remote, $LocalPath` | Clone/pull to explicit path, write, push |
-| `GitHub` / `GitLab` | `$Remote, $LocalPath` | + `CreateRepo`, platform APIs |
-| `Elastic`, `Kibana`, `Grafana`, `PostHog`, `PostgreSql`, `Spaceship` | reads service vars from env | Service APIs |
+`build` → `unit-test` → `gitleaks` → `semgrep` → `syft` → `grype` → `trivy` → `sonar` → `push` (live only). Deploy is Watchtower on the IaC host via `compose.yml`.
 
-IaC scripts clone to `/tmp/iac-*`, push, then delete — never touch the project repo.
+Finding-producing steps import reports to Defect Dojo and emit summaries to Elasticsearch (`{project}-findings`).
 
-## Usage
+| Lib | Purpose |
+|-----|---------|
+| `Project.ps1` | `project.yml` parser, `Get('remotes.live')`, pipeline context |
+| `Elastic.ps1` | Pipeline step + finding telemetry |
+| `DefectDojo.ps1` | Scan import (CI) |
+| `Registry.ps1` | Docker build / tag / push |
+| `Gitleaks.ps1` | Secrets scan |
+| `Semgrep.ps1` | SAST |
+| `Syft.ps1` | SBOM (CycloneDX) |
+| `Grype.ps1` | SBOM vulnerability scan (after syft) |
+| `Trivy.ps1` | Container image scan |
+| `Sonar.ps1` | SonarQube |
 
-```powershell
-pwsh ./cmd/apply-caddy.ps1
-$env:ENV_FILE = '.env.development'; pwsh ./cmd/apply-dashboards.ps1
-```
-
-Release CI (`release/steps/common.sh`) dot-sources `Project.ps1` inline via `pwsh`.
+Scanner images are pinned in each lib class. Scan reports go to `$TMP/release-scan`. Sonar runs via `sonar-scanner` on the runner. Bootstrap Defect Dojo / PostHog IDs via `./cmd/apply-dashboards.ps1`.

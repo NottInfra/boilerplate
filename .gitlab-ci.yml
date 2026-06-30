@@ -2,44 +2,58 @@ stages:
   - build
   - scan
   - sonar
-  - deploy
-
-default:
-  before_script:
-    - apk add --no-cache bash
 
 build:
   stage: build
   tags: [self-hosted, test]
   script:
-    - bash ./release/steps/build.sh test
+    - pwsh ./release/steps/build.ps1 test
 
 unit-test:
   stage: scan
-  image: golang:1.25.11-alpine
   tags: [self-hosted, test]
   needs: [build]
   script:
-    - bash ./release/steps/unit-test.sh test
+    - pwsh ./release/steps/unit-test.ps1 test
+
+gitleaks:
+  stage: scan
+  tags: [self-hosted, test]
+  needs: [unit-test]
+  script:
+    - pwsh ./release/steps/gitleaks.ps1 test
+
+semgrep:
+  stage: scan
+  tags: [self-hosted, test]
+  needs: [gitleaks]
+  script:
+    - pwsh ./release/steps/semgrep.ps1 test
+
+syft:
+  stage: scan
+  tags: [self-hosted, test]
+  needs: [build]
+  script:
+    - pwsh ./release/steps/syft.ps1 test
+
+grype:
+  stage: scan
+  tags: [self-hosted, test]
+  needs: [syft, semgrep]
+  script:
+    - pwsh ./release/steps/grype.ps1 test
 
 trivy:
   stage: scan
   tags: [self-hosted, test]
-  needs: [unit-test]
+  needs: [grype]
   script:
-    - bash ./release/steps/trivy.sh test
+    - pwsh ./release/steps/trivy.ps1 test
 
 sonar:
   stage: sonar
-  image: sonarsource/sonar-scanner-cli:11.5
   tags: [self-hosted, test]
-  needs: [unit-test]
+  needs: [trivy]
   script:
-    - bash ./release/steps/sonar.sh test
-
-deploy:
-  stage: deploy
-  tags: [self-hosted, test]
-  needs: [build, trivy, sonar]
-  script:
-    - bash ./release/steps/deploy.sh test
+    - pwsh ./release/steps/sonar.ps1 test

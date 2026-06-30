@@ -4,6 +4,7 @@ class PostHog {
     [string]$ProjectId
     [string]$Env
     [string]$ProjectName
+    [bool]$ResolvedProjectId
 
     PostHog([string]$ProjectName) {
         if (-not $env:POSTHOG_HOST) { throw '[!] POSTHOG_HOST is required' }
@@ -13,14 +14,29 @@ class PostHog {
         $this.Token = $env:POSTHOG_API_KEY
         $this.Env = $env:ENV
         $this.ProjectName = $ProjectName
-        $this.ProjectId = if ($env:POSTHOG_PROJECT_ID) { $env:POSTHOG_PROJECT_ID } else { $this.ResolveProjectId() }
+        $this.ResolvedProjectId = $false
+        if ($env:POSTHOG_PROJECT_ID) {
+            $this.ProjectId = $env:POSTHOG_PROJECT_ID
+        }
+        else {
+            $this.ProjectId = $this.FindOrCreateProject()
+            $this.ResolvedProjectId = $true
+        }
     }
 
-    hidden [string] ResolveProjectId() {
+    hidden [string] FindOrCreateProject() {
         $headers = @{ Authorization = "Bearer $($this.Token)"; 'Content-Type' = 'application/json' }
         $r = Invoke-RestMethod -Uri "$($this.BaseUrl)/api/projects/" -Headers $headers
-        if (-not $r.results -or $r.results.Count -eq 0) { throw '[!] PostHog: no projects found' }
-        return [string]$r.results[0].id
+        foreach ($p in $r.results) {
+            if ($p.name -eq $this.ProjectName) {
+                Write-Host "[+] PostHog project: $($this.ProjectName) (id=$($p.id))"
+                return [string]$p.id
+            }
+        }
+        $body = (@{ name = $this.ProjectName } | ConvertTo-Json -Compress)
+        $created = Invoke-RestMethod -Method Post -Uri "$($this.BaseUrl)/api/projects/" -Headers $headers -Body $body
+        Write-Host "[+] PostHog project created: $($this.ProjectName) (id=$($created.id))"
+        return [string]$created.id
     }
 
     hidden [object] FindDashboard([string]$Name) {

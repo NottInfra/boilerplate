@@ -21,6 +21,4 @@ Each dashboard is scoped to the project from `project.yml`:
 |----------|--------|
 | Grafana | folder `{project}/{slug}`, dashboard `{project} / {slug} ({ENV})` |
 | Kibana | title `{project} / {slug}` |
-| PostHog | name `{project} / {slug}` (requires `POSTHOG_HOST`, `POSTHOG_API_KEY`) |
-
-Empty placeholder files are skipped. PostHog is optional if env vars are not set.
+| PostHog | name `{project} / {slug}` |

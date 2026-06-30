@@ -8,8 +8,6 @@ on:
     - cron: '0 0 * * *'
 
 env:
-  VAULT_ADDR: http://vault:8200
-  VAULT_READ_TOKEN: ${{ secrets.VAULT_READ_TOKEN }}
   SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
 jobs:
@@ -17,39 +15,60 @@ jobs:
     runs-on: [self-hosted, live, 1imooo]
     steps:
       - uses: actions/checkout@v4
-      - run: bash ./release/steps/build.sh live
+      - run: pwsh ./release/steps/build.ps1 live
 
   unit-test:
     needs: build
     runs-on: [self-hosted, live, 1imooo]
     steps:
       - uses: actions/checkout@v4
-      - run: bash ./release/steps/unit-test.sh live
+      - run: pwsh ./release/steps/unit-test.ps1 live
 
-  trivy:
+  gitleaks:
     needs: unit-test
     runs-on: [self-hosted, live, 1imooo]
     steps:
       - uses: actions/checkout@v4
-      - run: bash ./release/steps/trivy.sh live
+      - run: pwsh ./release/steps/gitleaks.ps1 live
+
+  semgrep:
+    needs: gitleaks
+    runs-on: [self-hosted, live, 1imooo]
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh ./release/steps/semgrep.ps1 live
+
+  syft:
+    needs: build
+    runs-on: [self-hosted, live, 1imooo]
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh ./release/steps/syft.ps1 live
+
+  grype:
+    needs: [syft, semgrep]
+    runs-on: [self-hosted, live, 1imooo]
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh ./release/steps/grype.ps1 live
+
+  trivy:
+    needs: grype
+    runs-on: [self-hosted, live, 1imooo]
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh ./release/steps/trivy.ps1 live
 
   sonar:
     needs: trivy
     runs-on: [self-hosted, live, 1imooo]
     steps:
       - uses: actions/checkout@v4
-      - run: bash ./release/steps/sonar.sh live
+      - run: pwsh ./release/steps/sonar.ps1 live
 
   push:
     needs: sonar
     runs-on: [self-hosted, live, 1imooo]
     steps:
       - uses: actions/checkout@v4
-      - run: bash ./release/steps/push.sh live
-
-  deploy:
-    needs: push
-    runs-on: [self-hosted, live, 1imooo]
-    steps:
-      - uses: actions/checkout@v4
-      - run: bash ./release/steps/deploy.sh live
+      - run: pwsh ./release/steps/push.ps1 live

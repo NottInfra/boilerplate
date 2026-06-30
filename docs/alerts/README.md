@@ -5,10 +5,16 @@ Source files in `alerts/` (when present):
 - `grafana.json` — Grafana alerting rules
 - `kibana.json` — Kibana alerting rules
 
-Applied via `./cmd/apply-alerts.sh`.
+Applied via `./cmd/apply-alerts.ps1`.
 
-## Synthetic monitoring
+## Pipeline failures
 
-Uptime / reachability checks are **not** applied here — they use the blackbox exporter via `./cmd/apply-synth-mon.ps1`, which pushes targets to the IaC repo under `servers/{server}/docker/blackbox/configs/https/` (server from `public.app.*.server` in `project.yml`).
+CI steps emit documents to `{project}-pipeline` in Elasticsearch when `ES_URL` is set (`event: pipeline_step`, `pipeline.status: failed`). Finding steps also write to `{project}-findings` (`event: pipeline_finding`).
 
-Set `ENV` (`development` | `test` | `production`) in your env file before running apply scripts.
+Add a Kibana rule that queries e.g.:
+
+```json
+"esQuery": "event:pipeline_step AND pipeline.status:failed AND deployment.environment:\"__ENV__\""
+```
+
+`__ENV__` is substituted at apply time (same as other Kibana rules).
