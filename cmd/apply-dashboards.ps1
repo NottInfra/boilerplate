@@ -51,7 +51,7 @@ $posthog = $null
 
 $posthogDir = Join-Path $Root 'dashboards/posthog'
 if ((Get-ChildItem $posthogDir -Filter '*.json' -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })) {
-    if ($env:POSTHOG_HOST -and $env:POSTHOG_API_KEY) {
+    if ($env:POSTHOG_URL -and $env:POSTHOG_API_KEY) {
         $posthog = [PostHog]::new($name)
         $posthog.ImportDir($posthogDir)
         if ($posthog.ResolvedProjectId) {
@@ -59,7 +59,7 @@ if ((Get-ChildItem $posthogDir -Filter '*.json' -File -ErrorAction SilentlyConti
         }
     }
     else {
-        Write-Host '[i] PostHog dashboards present but POSTHOG_HOST / POSTHOG_API_KEY not set — skipping'
+        Write-Host '[i] PostHog dashboards present but POSTHOG_URL / POSTHOG_API_KEY not set — skipping'
     }
 }
 

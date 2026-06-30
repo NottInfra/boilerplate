@@ -4,9 +4,9 @@ class Vault {
     [string]$ReadToken
 
     Vault() {
-        if (-not $env:VAULT_ADDR) { throw '[!] VAULT_ADDR is required' }
+        if (-not $env:VAULT_URL) { throw '[!] VAULT_URL is required' }
         if (-not $env:VAULT_TOKEN) { throw '[!] VAULT_TOKEN is required' }
-        $this.Addr = $env:VAULT_ADDR.TrimEnd('/')
+        $this.Addr = $env:VAULT_URL.TrimEnd('/')
         $this.Token = $env:VAULT_TOKEN
         $this.ReadToken = if ($env:VAULT_READ_TOKEN) { $env:VAULT_READ_TOKEN } else { $env:VAULT_TOKEN }
     }

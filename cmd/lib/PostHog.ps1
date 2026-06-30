@@ -7,10 +7,10 @@ class PostHog {
     [bool]$ResolvedProjectId
 
     PostHog([string]$ProjectName) {
-        if (-not $env:POSTHOG_HOST) { throw '[!] POSTHOG_HOST is required' }
+        if (-not $env:POSTHOG_URL) { throw '[!] POSTHOG_URL is required' }
         if (-not $env:POSTHOG_API_KEY) { throw '[!] POSTHOG_API_KEY is required' }
         if (-not $env:ENV) { throw '[!] ENV is required' }
-        $this.BaseUrl = $env:POSTHOG_HOST.TrimEnd('/')
+        $this.BaseUrl = $env:POSTHOG_URL.TrimEnd('/')
         $this.Token = $env:POSTHOG_API_KEY
         $this.Env = $env:ENV
         $this.ProjectName = $ProjectName
