@@ -2,6 +2,7 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Project.ps1"
+. "$PSScriptRoot/lib/Gitleaks.ps1"
 
 $Root = (git rev-parse --show-toplevel 2>$null)
 if (-not $Root) { $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
@@ -33,6 +34,8 @@ $target = if ($channel -eq 'live') { $live } else { $test }
 
 $msg = Read-Host 'Commit message'
 if ([string]::IsNullOrWhiteSpace($msg)) { throw '[!] Commit message required' }
+
+[Gitleaks]::new().Scan()
 
 if (git status --porcelain) { git add -A; git commit -m $msg }
 else { Write-Host '[i] Working tree clean — pushing existing commits only' }
