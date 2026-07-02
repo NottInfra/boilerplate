@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
-. "$PSScriptRoot/../lib/Project.ps1"
+. "$PSScriptRoot/../lib/ProjectConfigParse.ps1"
 . "$PSScriptRoot/../lib/Trivy.ps1"
 . "$PSScriptRoot/../lib/DefectDojo.ps1"
 . "$PSScriptRoot/../lib/Elastic.ps1"
@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $staging = $args[0]
 if (-not $staging) { throw '[!] staging required: live|test' }
 
-$project = [Project]::new($staging)
+$project = [ProjectConfigParse]::new($staging)
 $elastic = [Elastic]::new($project.Name, $staging)
 $dojo = [DefectDojo]::new($project.Name)
 $scanner = [Trivy]::new($project.Image)

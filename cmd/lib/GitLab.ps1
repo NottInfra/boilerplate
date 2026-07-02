@@ -52,4 +52,16 @@ class GitLab : GitRemote {
         [void]$this.Api("/projects/$($project.id)/pipeline_schedules", 'Post', $body)
         Write-Host "[+] GitLab pipeline schedule created: $Cron on $Ref"
     }
+
+    [string] CreatePullRequest([string]$SourceBranch, [string]$TargetBranch, [string]$Title) {
+        $projectPath = [uri]::EscapeDataString([GitRemote]::ParseUrl($this.Remote).Path)
+        $project = $this.Api("/projects/$projectPath")
+        $mr = $this.Api("/projects/$($project.id)/merge_requests", 'Post', @{
+            source_branch = $SourceBranch
+            target_branch = $TargetBranch
+            title         = $Title
+        })
+        Write-Host "[+] GitLab MR created: $($mr.web_url)"
+        return $mr.web_url
+    }
 }

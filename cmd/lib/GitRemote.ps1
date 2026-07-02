@@ -51,6 +51,20 @@ class GitRemote {
         Write-Host "[+] IaC pushed: $Message"
     }
 
+    [void] CreateBranch([string]$Name) {
+        & git -C $this.LocalPath branch $Name 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "[!] git branch failed: $Name" }
+    }
+
+    [void] PushBranch([string]$RemoteName, [string]$BranchName) {
+        & git -C $this.LocalPath push $RemoteName "HEAD:$BranchName" 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "[!] git push failed: $BranchName" }
+    }
+
+    [string] CreatePullRequest([string]$SourceBranch, [string]$TargetBranch, [string]$Title) {
+        throw '[!] CreatePullRequest not supported for this remote'
+    }
+
     static [hashtable] ParseUrl([string]$Url) {
         if ($Url -match '^ssh://git@([^:/]+):[0-9]+/(.+)$') {
             return @{ Host = $Matches[1]; Path = $Matches[2] -replace '\.git$', '' }
@@ -66,7 +80,7 @@ class GitRemote {
 
     static [GitRemote] ForRemote([string]$Remote, [string]$LocalPath) {
         $gitHost = ([GitRemote]::ParseUrl($Remote)).Host
-        if ($gitHost -eq 'github.com') { return [GitHub]::new($Remote, $LocalPath) }
-        return [GitLab]::new($Remote, $LocalPath)
+        $typeName = if ($gitHost -eq 'github.com') { 'GitHub' } else { 'GitLab' }
+        return [GitRemote](New-Object -TypeName $typeName -ArgumentList $Remote, $LocalPath)
     }
 }

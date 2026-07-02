@@ -43,4 +43,14 @@ class GitHub : GitRemote {
         $this.CommitAndPush("ci: schedule $Workflow every 24h")
         Write-Host "[+] GitHub schedule added: $Workflow ($Cron)"
     }
+
+    [string] CreatePullRequest([string]$SourceBranch, [string]$TargetBranch, [string]$Title) {
+        if (-not $this.HasGh) { throw '[!] gh CLI required' }
+        $repo = ([GitRemote]::ParseUrl($this.Remote)).Path
+        $out = & gh pr create --repo $repo --base $TargetBranch --head $SourceBranch --title $Title --body $Title 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "[!] gh pr create failed: $out" }
+        $url = ($out | Select-Object -Last 1).ToString().Trim()
+        Write-Host "[+] GitHub PR created: $url"
+        return $url
+    }
 }

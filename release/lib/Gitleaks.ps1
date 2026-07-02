@@ -13,13 +13,16 @@ class Gitleaks {
 
     [string] Scan() {
         if (Test-Path $this.ReportFile) { Remove-Item $this.ReportFile -Force }
-        Write-Host "[+] gitleaks workdir=$($this.WorkDir)"
+        $src = $this.WorkDir
+        $report = $this.ReportFile
+        $scanDir = $this.ScanDir
+        Write-Host "[+] gitleaks workdir=$src"
         & docker run --rm `
-            -v "$($this.WorkDir):$($this.WorkDir)" `
-            -v "$($this.ScanDir):$($this.ScanDir)" `
-            -w $this.WorkDir `
-            zricethezav/gitleaks:8.21.2 `
-            detect --source=$this.WorkDir --report-path=$this.ReportFile --report-format=json --no-banner
+            -v "${src}:${src}" `
+            -v "${scanDir}:${scanDir}" `
+            -w $src `
+            zricethezav/gitleaks:v8.21.2 `
+            detect --source=$src --report-path=$report --report-format=json --no-banner
         $exit = $LASTEXITCODE
         if (-not (Test-Path $this.ReportFile)) {
             '[]' | Set-Content -Path $this.ReportFile -NoNewline

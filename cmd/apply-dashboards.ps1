@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Env.ps1"
-. "$PSScriptRoot/lib/Project.ps1"
+. "$PSScriptRoot/lib/ProjectConfigParse.ps1"
 . "$PSScriptRoot/lib/Elastic.ps1"
 . "$PSScriptRoot/lib/Kibana.ps1"
 . "$PSScriptRoot/lib/Grafana.ps1"
@@ -29,7 +29,7 @@ if (-not $hasAny) { throw '[!] No dashboards found under dashboards/{grafana,kib
 
 [void][Env]::new($Root)
 
-$project = [Project]::new((Join-Path $Root 'project.yml'))
+$project = [ProjectConfigParse]::new((Join-Path $Root 'project.cfg'))
 $name = $project.Name
 
 Write-Host "[+] Applying dashboards (ENV=$($env:ENV), project=$name)"

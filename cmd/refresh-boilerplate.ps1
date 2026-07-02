@@ -1,9 +1,9 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
-. "$PSScriptRoot/lib/Cfg.ps1"
+. "$PSScriptRoot/lib/ProjectConfigParse.ps1"
 
-$preserve = @('.git', 'src', '.env', '.env.development', '.env.test', '.env.production', 'project.yml', 'Caddyfile', 'compose.yml', 'assets/db.sql')
+$preserve = @('.git', 'src', '.env', '.env.development', '.env.test', '.env.production', 'project.cfg', 'Caddyfile', 'compose.yml', 'assets/db.sql')
 
 $added = [System.Collections.Generic.List[string]]::new()
 $updated = [System.Collections.Generic.List[string]]::new()
@@ -70,7 +70,7 @@ $Root = (git rev-parse --show-toplevel 2>$null)
 if (-not $Root) { $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
 Set-Location $Root
 
-$git = [Cfg]::new((Join-Path $Root 'boilerplate.cfg')).Get('boilerplate_git')
+$git = [ProjectConfigParse]::new((Join-Path $Root 'project.cfg')).Require('remotes.boilerplate.url')
 $stage = Join-Path ([IO.Path]::GetTempPath()) "boilerplate.$([guid]::NewGuid().ToString('N').Substring(0, 8))"
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 try {

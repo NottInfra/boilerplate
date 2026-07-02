@@ -1,26 +1,44 @@
-class Project {
+class ProjectConfigParse {
     hidden [string]$File
     hidden [hashtable]$Tree
     [string]$Name
-    [string]$Env
-    [string]$Root
-    [string]$Image
+    [string]$Staging
+    [string]$Domain
+    [string]$Host
+    [string]$Endpoint
+    [string]$Server
+    [string]$HostPort
+    [string]$ContainerPort
+    [string]$RemoteName
+    [string]$RemoteUrl
+    [string]$Branch
+    [string]$Release
 
-    Project([string]$Env) {
-        if ($Env -notin @('live', 'test')) { throw '[!] env required: live|test' }
-        if (-not $env:REGISTRY_URL) { throw '[!] REGISTRY_URL is required' }
-        $repoRoot = if ($env:CI_PROJECT_DIR) { $env:CI_PROJECT_DIR } else { (Get-Location).Path }
-        $repoRoot = (Resolve-Path $repoRoot).Path
-        Set-Location $repoRoot
-        $this.Env = $Env
-        $this.File = Join-Path $repoRoot 'project.yml'
+    ProjectConfigParse([string]$FilePath) {
+        $this.File = $FilePath
         if (-not (Test-Path $this.File)) { throw "[!] missing $($this.File)" }
         $this.Tree = $this.ReadYaml()
         $this.Name = [string]$this.Get('project')
-        if ([string]::IsNullOrWhiteSpace($this.Name)) { throw '[!] project name required in project.yml' }
-        $tag = if ($Env -eq 'live') { 'prod' } else { 'test' }
-        $this.Root = $repoRoot
-        $this.Image = "$($env:REGISTRY_URL)/$($this.Name):$tag"
+        if ([string]::IsNullOrWhiteSpace($this.Name)) { throw '[!] project name required in project.cfg' }
+
+        if (-not $env:ENV) { return }
+
+        $norm = $env:ENV.ToLower()
+        $accepted = @('live', 'test', 'dev', 'development')
+        if ($accepted -notcontains $norm) { throw "[!] ENV must be live, test, dev, or development (got $env:ENV)" }
+        $this.Staging = $norm
+
+        $st = $this.Staging
+        $this.Domain = [string]$this.Get("public.domain")
+        $this.Host = [string]$this.Get("public.host")
+        $this.Endpoint = [string]$this.Get("public.app.$st.endpoint")
+        $this.Server = [string]$this.Get("public.app.$st.server")
+        $this.HostPort = [string]$this.Get("public.app.$st.ports.host")
+        $this.ContainerPort = [string]$this.Get("public.app.$st.ports.container")
+        $this.RemoteName = [string]$this.Get("remotes.$st.remote")
+        $this.RemoteUrl = [string]$this.Get("remotes.$st.url")
+        $this.Branch = [string]$this.Get("remotes.$st.branch")
+        $this.Release = [string]$this.Get("remotes.$st.release")
     }
 
     [object] Get([string]$Path) {
@@ -34,6 +52,14 @@ class Project {
             else { return $null }
         }
         return $this.ToObject($node)
+    }
+
+    [string] Require([string]$Path) {
+        $val = $this.Get($Path)
+        if ($null -eq $val -or ($val -is [string] -and [string]::IsNullOrWhiteSpace($val))) {
+            throw "[!] $Path not set in $($this.File)"
+        }
+        return [string]$val
     }
 
     hidden [hashtable] ReadYaml() {

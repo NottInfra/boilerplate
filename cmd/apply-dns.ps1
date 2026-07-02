@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Env.ps1"
-. "$PSScriptRoot/lib/Project.ps1"
+. "$PSScriptRoot/lib/ProjectConfigParse.ps1"
 . "$PSScriptRoot/lib/Spaceship.ps1"
 
 $Root = (git rev-parse --show-toplevel 2>$null)
@@ -11,22 +11,26 @@ Set-Location $Root
 
 [void][Env]::new($Root)
 
-$project = [Project]::new((Join-Path $Root 'project.yml'))
-$plan = $project.DnsPlan()
+$project = [ProjectConfigParse]::new((Join-Path $Root 'project.cfg'))
+$registry = $project.Require('public.dns.registry')
+$domain = $project.Require('public.domain')
+$pubHost = $project.Require('public.host')
+$names = @($project.Get('public.dns.A'))
+if (-not $names -or $names.Count -eq 0) { throw '[!] public.dns.A required in project.cfg' }
 
-if ($plan.Registry.ToUpper() -ne 'SPACESHIP') {
-    throw "[!] public.dns.registry must be SPACESHIP (got $($plan.Registry))"
+if ($registry.ToUpper() -ne 'SPACESHIP') {
+    throw "[!] public.dns.registry must be SPACESHIP (got $registry)"
 }
 
-$items = foreach ($name in $plan.Names) {
+$items = foreach ($name in $names) {
     [ordered]@{
         type    = 'A'
         name    = $name
-        address = $plan.Host
+        address = $pubHost
         ttl     = 3600
     }
 }
 
-Write-Host "[+] Applying DNS ($($plan.Domain), registry=$($plan.Registry))"
-[Spaceship]::new().SaveRecords($plan.Domain, $items)
+Write-Host "[+] Applying DNS ($domain, registry=$registry)"
+[Spaceship]::new().SaveRecords($domain, $items)
 Write-Host '[+] Done — DNS'

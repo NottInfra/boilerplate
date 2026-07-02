@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Env.ps1"
-. "$PSScriptRoot/lib/Project.ps1"
+. "$PSScriptRoot/lib/ProjectConfigParse.ps1"
 . "$PSScriptRoot/lib/Kibana.ps1"
 . "$PSScriptRoot/lib/Grafana.ps1"
 
@@ -16,7 +16,7 @@ foreach ($f in @('alerts/kibana.json', 'alerts/grafana.json')) {
 
 [void][Env]::new($Root)
 
-$project = [Project]::new((Join-Path $Root 'project.yml'))
+$project = [ProjectConfigParse]::new((Join-Path $Root 'project.cfg'))
 
 Write-Host "[+] Applying alerts (ENV=$($env:ENV))"
 [Kibana]::new($project.Name).ApplyAlertingRules((Join-Path $Root 'alerts/kibana.json'))
