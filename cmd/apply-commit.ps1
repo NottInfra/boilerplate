@@ -9,40 +9,28 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/lib/SourceControl.ps1"
 
 [void][Env]::new()
-
 $project = [ProjectConfigParse]::new()
-$liveRemote = $project.Require('remotes.live.remote')
-$liveUrl = $project.Require('remotes.live.url')
-$liveBranch = $project.Require('remotes.live.branch')
-$testRemote = $project.Require('remotes.test.remote')
-$testUrl = $project.Require('remotes.test.url')
-$testBranch = $project.Require('remotes.test.branch')
 
-git remote get-url $liveRemote 2>$null
-if ($LASTEXITCODE -eq 0) { git remote set-url $liveRemote $liveUrl }
-else { git remote add $liveRemote $liveUrl }
+$channel = switch ($env:ENV.ToLower()) {
+    'live' { 'live' }
+    { $_ -in @('test', 'development', 'dev') } { 'test' }
+    default { throw "[!] apply-commit requires development, test, or live (got $env:ENV)" }
+}
 
-git remote get-url $testRemote 2>$null
-if ($LASTEXITCODE -eq 0) { git remote set-url $testRemote $testUrl }
-else { git remote add $testRemote $testUrl }
+foreach ($name in @('live', 'test')) {
+    $remote = $project.Require("remotes.$name.remote")
+    $url = $project.Require("remotes.$name.url")
+    git remote get-url $remote 2>$null
+    if ($LASTEXITCODE -eq 0) { git remote set-url $remote $url }
+    else { git remote add $remote $url }
+}
+
+$targetRemote = $project.Require("remotes.$channel.remote")
+$targetUrl = $project.Require("remotes.$channel.url")
+$targetBranch = $project.Require("remotes.$channel.branch")
 
 Write-Host ''
-Write-Host 'Release channel:'
-Write-Host "  1) live  → $liveRemote / $liveBranch"
-Write-Host "  2) test  → $testRemote / $testBranch"
-$choice = Read-Host 'Choose 1/2'
-$channel = switch ($choice) { '1' { 'live' } '2' { 'test' } default { throw '[!] Invalid choice' } }
-
-if ($channel -eq 'live') {
-    $targetRemote = $liveRemote
-    $targetUrl = $liveUrl
-    $targetBranch = $liveBranch
-}
-else {
-    $targetRemote = $testRemote
-    $targetUrl = $testUrl
-    $targetBranch = $testBranch
-}
+Write-Host "[+] Push target: $channel → $targetRemote / $targetBranch (ENV=$env:ENV)"
 
 $msg = Read-Host 'Commit message'
 if ([string]::IsNullOrWhiteSpace($msg)) { throw '[!] Commit message required' }
