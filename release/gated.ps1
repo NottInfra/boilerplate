@@ -1,11 +1,11 @@
 #!/usr/bin/env pwsh
-# Test pipeline — build, test, scan, deploy. Deploy is Watchtower on the IaC host.
+# Gated pipeline — build, test, scan, sonar (PR mode). No push/deploy.
 $ErrorActionPreference = 'Stop'
 
 $Env = 'test'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$All = @('gitleaks', 'unit-test', 'semgrep', 'sonar', 'build', 'syft', 'grype', 'trivy', 'deploy')
-$env:RELEASE_PIPELINE = 'test'
+$All = @('gitleaks', 'unit-test', 'semgrep', 'sonar', 'build', 'syft', 'grype', 'trivy')
+$env:RELEASE_PIPELINE = 'gated'
 
 $step = if ($args[0]) { $args[0] } else { 'all' }
 if ($step -eq 'scan') { $step = 'trivy' }

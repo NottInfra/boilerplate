@@ -4,9 +4,9 @@ class Kibana {
     [string]$ProjectName
 
     Kibana([string]$ProjectName) {
-        if (-not $env:KIBANA_URL) { throw '[!] KIBANA_URL is required' }
+        if (-not $env:KIBANA_URL_PUBLIC) { throw '[!] KIBANA_URL_PUBLIC is required' }
         if (-not $env:ENV) { throw '[!] ENV is required' }
-        $this.Url = $env:KIBANA_URL
+        $this.Url = $env:KIBANA_URL_PUBLIC
         $this.Env = $env:ENV
         $this.ProjectName = $ProjectName
     }
@@ -31,6 +31,15 @@ class Kibana {
         return ($lines -join "`n")
     }
 
+    hidden [hashtable] Headers() {
+        $h = @{ 'kbn-xsrf' = 'true' }
+        if ($env:KIBANA_USER) {
+            $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$($env:KIBANA_USER):$($env:KIBANA_PASSWORD)"))
+            $h.Authorization = "Basic $b64"
+        }
+        return $h
+    }
+
     [void] ImportNdjson([string]$File, [string]$Slug) {
         Write-Host "== Kibana import: $($this.Url) =="
         Write-Host "    $($this.ProjectName) / $Slug ← $File"
@@ -40,7 +49,7 @@ class Kibana {
             Set-Content -Path $tmp -Value $body -NoNewline
             $form = @{ file = Get-Item $tmp }
             $r = Invoke-RestMethod -Method Post -Uri "$($this.Url)/api/saved_objects/_import?overwrite=true" `
-                -Headers @{ 'kbn-xsrf' = 'true' } -Form $form
+                -Headers $this.Headers() -Form $form
             if (-not $r.success) {
                 $r | ConvertTo-Json -Depth 10
                 throw '[!] Kibana import reported errors'
@@ -74,7 +83,8 @@ class Kibana {
             }
             $update = $create | Select-Object * -ExcludeProperty rule_type_id, consumer, enabled
             $uri = "$($this.Url)/api/alerting/rule/$id"
-            $headers = @{ 'kbn-xsrf' = 'true'; 'Content-Type' = 'application/json' }
+            $headers = $this.Headers()
+            $headers['Content-Type'] = 'application/json'
             try {
                 Invoke-RestMethod -Method Get -Uri $uri -Headers $headers -ErrorAction Stop | Out-Null
                 $body = $update | ConvertTo-Json -Depth 30 -Compress

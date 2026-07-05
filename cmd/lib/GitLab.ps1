@@ -3,9 +3,9 @@ class GitLab : GitRemote {
     [string]$Token
 
     GitLab([string]$Remote, [string]$LocalPath) : base($Remote, $LocalPath) {
-        if (-not $env:GITLAB_URL) { throw '[!] GITLAB_URL is required' }
+        if (-not $env:GITLAB_URL_PUBLIC) { throw '[!] GITLAB_URL_PUBLIC is required' }
         if (-not $env:GITLAB_TOKEN) { throw '[!] GITLAB_TOKEN is required' }
-        $this.ApiUrl = $env:GITLAB_URL.TrimEnd('/')
+        $this.ApiUrl = $env:GITLAB_URL_PUBLIC.TrimEnd('/')
         $this.Token = $env:GITLAB_TOKEN
     }
 

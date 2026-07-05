@@ -12,7 +12,8 @@ if (-not $staging) { throw '[!] staging required: live|test' }
 $project = [ProjectConfigParse]::new($staging)
 $elastic = [Elastic]::new($project.Name, $staging)
 $dojo = [DefectDojo]::new($project.Name)
-$scanner = [Syft]::new($project.Image)
+$image = if ($env:RELEASE_IMAGE) { $env:RELEASE_IMAGE } else { $project.Image }
+$scanner = [Syft]::new($image)
 
 $elastic.Step('syft', 'started')
 $report = $null

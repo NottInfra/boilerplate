@@ -13,11 +13,39 @@ $elastic = [Elastic]::new($project.Name, $staging)
 $elastic.Step('build', 'started')
 
 try {
-    $registry = [Registry]::new($project.Root, $project.Image)
+    $artifactDir = if ($env:ARTIFACT_DIR) {
+        (New-Item -ItemType Directory -Path $env:ARTIFACT_DIR -Force).FullName
+    }
+    else {
+        $project.Root
+    }
+
+    $sha = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } elseif ($env:CI_COMMIT_SHA) { $env:CI_COMMIT_SHA } else { '' }
+    $releaseImage = if ($env:RELEASE_IMAGE) {
+        $env:RELEASE_IMAGE
+    }
+    elseif ($sha) {
+        "$($env:REGISTRY_URL)/$($project.Name):ci-$sha"
+    }
+    else {
+        $project.Image
+    }
+
+    $registry = [Registry]::new($project.Root, $releaseImage)
     $registry.Build()
-    if ($staging -eq 'test') {
+    if ($sha -or $staging -eq 'test') {
         $registry.Push()
     }
+
+    $artifact = [ordered]@{
+        image = $releaseImage
+        targetImage = $project.Image
+        commit = $sha
+        staging = $staging
+        createdAt = (Get-Date).ToUniversalTime().ToString('o')
+    }
+    $artifact | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $artifactDir 'build-artifact.json') -Encoding utf8
+
     $elastic.Step('build', 'succeeded')
 }
 catch {

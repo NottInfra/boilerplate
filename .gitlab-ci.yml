@@ -1,59 +1,161 @@
+# Scheduled pipelines: cron 0 0 * * * on develop only
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+default:
+  interruptible: true
+
+variables:
+  ARTIFACT_DIR: artifacts
+
 stages:
+  - gitleaks
+  - unit-test
+  - source-check
   - build
   - scan
-  - sonar
+  - grype
+  - trivy
+  - deploy
 
-build:
-  stage: build
-  tags: [self-hosted, test]
-  script:
-    - pwsh ./release/steps/build.ps1 test
+.ci:setup:
+  image: mcr.microsoft.com/powershell:lts-debian-bookworm
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq git make
 
-unit-test:
-  stage: scan
-  tags: [self-hosted, test]
-  needs: [build]
+.ci:step:
+  extends: .ci:setup
+  tags: [self-hosted]
+  timeout: 30m
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      variables:
+        RELEASE_PIPELINE: test
+    - when: always
+      variables:
+        RELEASE_PIPELINE: gated
   script:
-    - pwsh ./release/steps/unit-test.ps1 test
+    - |
+      if [ -f "$ARTIFACT_DIR/build-artifact.json" ]; then
+        export RELEASE_IMAGE="$(pwsh -NoProfile -Command '(Get-Content (Join-Path $env:ARTIFACT_DIR "build-artifact.json") -Raw | ConvertFrom-Json).image')"
+        echo "[+] RELEASE_IMAGE=$RELEASE_IMAGE"
+        docker pull "$RELEASE_IMAGE"
+      fi
+    - pwsh "./release/${RELEASE_PIPELINE}.ps1" "$CI_JOB_NAME"
 
 gitleaks:
-  stage: scan
-  tags: [self-hosted, test]
-  needs: [unit-test]
-  script:
-    - pwsh ./release/steps/gitleaks.ps1 test
+  extends: .ci:step
+  stage: gitleaks
+
+unit-test:
+  extends: .ci:step
+  stage: unit-test
+  needs:
+    - job: gitleaks
+      artifacts: false
 
 semgrep:
-  stage: scan
-  tags: [self-hosted, test]
-  needs: [gitleaks]
-  script:
-    - pwsh ./release/steps/semgrep.ps1 test
-
-syft:
-  stage: scan
-  tags: [self-hosted, test]
-  needs: [build]
-  script:
-    - pwsh ./release/steps/syft.ps1 test
-
-grype:
-  stage: scan
-  tags: [self-hosted, test]
-  needs: [syft, semgrep]
-  script:
-    - pwsh ./release/steps/grype.ps1 test
-
-trivy:
-  stage: scan
-  tags: [self-hosted, test]
-  needs: [grype]
-  script:
-    - pwsh ./release/steps/trivy.ps1 test
+  extends: .ci:step
+  stage: source-check
+  needs:
+    - job: unit-test
+      artifacts: false
 
 sonar:
-  stage: sonar
-  tags: [self-hosted, test]
-  needs: [trivy]
+  extends: .ci:step
+  stage: source-check
+  needs:
+    - job: unit-test
+      artifacts: false
+
+build:
+  extends: .ci:step
+  stage: build
+  needs:
+    - job: semgrep
+      artifacts: false
+    - job: sonar
+      artifacts: false
+  artifacts:
+    paths:
+      - artifacts/build-artifact.json
+    expire_in: 1 day
+
+syft:
+  extends: .ci:step
+  stage: scan
+  needs:
+    - job: build
+      artifacts: true
+  artifacts:
+    when: always
+    paths:
+      - artifacts/sbom.cyclonedx.json
+    expire_in: 1 day
+
+grype:
+  extends: .ci:step
+  stage: grype
+  needs:
+    - job: syft
+      artifacts: true
+
+trivy:
+  extends: .ci:step
+  stage: trivy
+  needs:
+    - job: build
+      artifacts: true
+
+deploy:
+  extends: .ci:setup
+  stage: deploy
+  tags: [self-hosted]
+  timeout: 30m
+  interruptible: false
+  needs:
+    - job: gitleaks
+      artifacts: false
+    - job: unit-test
+      artifacts: false
+    - job: semgrep
+      artifacts: false
+    - job: sonar
+      artifacts: false
+    - job: build
+      artifacts: true
+    - job: syft
+      artifacts: false
+    - job: grype
+      artifacts: false
+    - job: trivy
+      artifacts: false
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      variables:
+        RELEASE_PIPELINE: test
+    - when: never
   script:
-    - pwsh ./release/steps/sonar.ps1 test
+    - git fetch --no-tags --depth=1 origin "$CI_COMMIT_REF_NAME"
+    - |
+      HEAD="$(git rev-parse HEAD)"
+      TIP="$(git rev-parse "origin/$CI_COMMIT_REF_NAME")"
+      if [ "$HEAD" != "$TIP" ]; then
+        echo "Skipping deploy for stale commit $HEAD; branch tip is $TIP."
+        exit 0
+      fi
+    - |
+      if [ -f "$ARTIFACT_DIR/build-artifact.json" ]; then
+        export RELEASE_IMAGE="$(pwsh -NoProfile -Command '(Get-Content (Join-Path $env:ARTIFACT_DIR "build-artifact.json") -Raw | ConvertFrom-Json).image')"
+        echo "[+] RELEASE_IMAGE=$RELEASE_IMAGE"
+      fi
+    - pwsh "./release/${RELEASE_PIPELINE}.ps1" deploy

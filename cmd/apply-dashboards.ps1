@@ -63,7 +63,7 @@ if ((Get-ChildItem $posthogDir -Filter '*.json' -File -ErrorAction SilentlyConti
     }
 }
 
-if ($env:DEFECT_DOJO_URL -and $env:DEFECT_DOJO_API_TOKEN) {
+if ($env:DEFECT_DOJO_URL_PUBLIC -and $env:DEFECT_DOJO_API_TOKEN) {
     $dojo = [DefectDojo]::new($name)
     $engId = $dojo.EnsureEngagement()
     if (-not $env:DEFECT_DOJO_ENGAGEMENT_ID) {
@@ -71,7 +71,7 @@ if ($env:DEFECT_DOJO_URL -and $env:DEFECT_DOJO_API_TOKEN) {
     }
 }
 elseif (-not $env:DEFECT_DOJO_ENGAGEMENT_ID) {
-    Write-Host '[i] Defect Dojo not configured — set DEFECT_DOJO_URL and DEFECT_DOJO_API_TOKEN, then re-run'
+    Write-Host '[i] Defect Dojo not configured — set DEFECT_DOJO_URL_PUBLIC and DEFECT_DOJO_API_TOKEN, then re-run'
 }
 
 if ($envHints.Count -gt 0) {

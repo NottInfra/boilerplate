@@ -7,10 +7,10 @@ class Elastic {
     hidden [string]$ProjectName
 
     Elastic([string]$ProjectName, [string]$Env) {
-        if (-not $env:ES_URL) { throw '[!] ES_URL is required' }
+        if (-not $env:ELASTIC_URL) { throw '[!] ELASTIC_URL is required' }
         if (-not $env:ELASTIC_USER) { throw '[!] ELASTIC_USER is required' }
         if (-not $env:ELASTIC_PASSWORD) { throw '[!] ELASTIC_PASSWORD is required' }
-        $this.Url = $env:ES_URL
+        $this.Url = $env:ELASTIC_URL
         $this.Env = $Env
         $this.UserPass = "$($env:ELASTIC_USER):$($env:ELASTIC_PASSWORD)"
         $this.ProjectName = $ProjectName

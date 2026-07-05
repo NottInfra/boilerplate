@@ -21,14 +21,14 @@ class Spaceship {
         return @($r.items)
     }
 
-    [void] SaveRecords([string]$Domain, [object[]]$Items, [bool]$Force = $true) {
+    [void] SaveRecords([string]$Domain, [object[]]$Items) {
         Write-Host "== Spaceship DNS save: $Domain ($($Items.Count) record(s)) =="
         foreach ($item in $Items) {
             $n = if ($item.name) { $item.name } else { '@' }
             $addr = if ($item.address) { $item.address } elseif ($item.value) { $item.value } else { '' }
             Write-Host "   → $($item.type) $n → $addr (ttl=$($item.ttl))"
         }
-        $body = (@{ force = $Force; items = $Items } | ConvertTo-Json -Depth 10 -Compress)
+        $body = (@{ force = $true; items = $Items } | ConvertTo-Json -Depth 10 -Compress)
         Invoke-RestMethod -Method Put -Uri "$($this.BaseUrl)/dns/records/$Domain" -Headers @{
             'X-Api-Key'    = $this.ApiKey
             'X-Api-Secret' = $this.ApiSecret

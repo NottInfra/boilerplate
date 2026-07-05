@@ -7,7 +7,11 @@ class Trivy {
 
     Trivy([string]$Image) {
         $this.Image = $Image
-        $this.ScanDir = Join-Path ([System.IO.Path]::GetTempPath()) 'release-scan'
+        $dirPath = Join-Path ([System.IO.Path]::GetTempPath()) 'release-scan'
+        if ($env:ARTIFACT_DIR) {
+            $dirPath = (New-Item -ItemType Directory -Path $env:ARTIFACT_DIR -Force).FullName
+        }
+        $this.ScanDir = $dirPath
         $this.CacheDir = Join-Path ([System.IO.Path]::GetTempPath()) 'trivy-cache'
         foreach ($dir in @($this.ScanDir, $this.CacheDir)) {
             if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }

@@ -1,10 +1,11 @@
 #!/usr/bin/env pwsh
-# Live pipeline — build, test, scan, push. Deploy is Watchtower on the IaC host.
+# Live pipeline — build, test, scan, deploy. Deploy is Watchtower on the IaC host.
 $ErrorActionPreference = 'Stop'
 
 $Env = 'live'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$All = @('build', 'unit-test', 'gitleaks', 'semgrep', 'syft', 'grype', 'trivy', 'sonar', 'push')
+$All = @('gitleaks', 'unit-test', 'semgrep', 'sonar', 'build', 'syft', 'grype', 'trivy', 'deploy')
+$env:RELEASE_PIPELINE = 'production'
 
 $step = if ($args[0]) { $args[0] } else { 'all' }
 if ($step -eq 'scan') { $step = 'trivy' }

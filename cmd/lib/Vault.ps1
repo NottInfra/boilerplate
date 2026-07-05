@@ -1,20 +1,18 @@
 class Vault {
     [string]$Addr
     [string]$Token
-    [string]$ReadToken
 
     Vault() {
         if (-not $env:VAULT_URL) { throw '[!] VAULT_URL is required' }
         if (-not $env:VAULT_TOKEN) { throw '[!] VAULT_TOKEN is required' }
         $this.Addr = $env:VAULT_URL.TrimEnd('/')
         $this.Token = $env:VAULT_TOKEN
-        $this.ReadToken = if ($env:VAULT_READ_TOKEN) { $env:VAULT_READ_TOKEN } else { $env:VAULT_TOKEN }
     }
 
     [hashtable] ReadSecret([string]$Path) {
         $uri = "$($this.Addr)/v1/secret/data/$Path"
         try {
-            $r = Invoke-RestMethod -Uri $uri -Headers @{ 'X-Vault-Token' = $this.ReadToken }
+            $r = Invoke-RestMethod -Uri $uri -Headers @{ 'X-Vault-Token' = $this.Token }
             return $r.data.data
         }
         catch { return @{} }

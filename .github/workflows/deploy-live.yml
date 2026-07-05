@@ -1,74 +1,171 @@
-name: deploy-live
+name: ci
 
 on:
   push:
-    branches: [main]
+  pull_request:
   workflow_dispatch:
   schedule:
     - cron: '0 0 * * *'
 
 env:
   SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  RELEASE_PIPELINE: ${{ github.ref == 'refs/heads/main' && 'production' || 'gated' }}
+  ARTIFACT_DIR: artifacts
 
 jobs:
-  build:
-    runs-on: [self-hosted, live, 1imooo]
+  gitleaks:
+    runs-on: self-hosted
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      cancel-in-progress: true
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: pwsh ./release/steps/build.ps1 live
+      - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 gitleaks
 
   unit-test:
-    needs: build
-    runs-on: [self-hosted, live, 1imooo]
+    needs: gitleaks
+    runs-on: self-hosted
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      cancel-in-progress: true
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: pwsh ./release/steps/unit-test.ps1 live
-
-  gitleaks:
-    needs: unit-test
-    runs-on: [self-hosted, live, 1imooo]
-    steps:
-      - uses: actions/checkout@v4
-      - run: pwsh ./release/steps/gitleaks.ps1 live
+      - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 unit-test
 
   semgrep:
-    needs: gitleaks
-    runs-on: [self-hosted, live, 1imooo]
+    needs: unit-test
+    runs-on: self-hosted
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      cancel-in-progress: true
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: pwsh ./release/steps/semgrep.ps1 live
+      - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 semgrep
+
+  sonar:
+    needs: unit-test
+    runs-on: self-hosted
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      cancel-in-progress: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 sonar
+
+  build:
+    needs: [semgrep, sonar]
+    runs-on: self-hosted
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      cancel-in-progress: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: ${{ env.ARTIFACT_DIR }}/build-artifact.json
+          if-no-files-found: error
 
   syft:
     needs: build
-    runs-on: [self-hosted, live, 1imooo]
+    runs-on: self-hosted
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      cancel-in-progress: true
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: pwsh ./release/steps/syft.ps1 live
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: Inject release image
+        shell: pwsh
+        run: |
+          $artifact = Get-Content "$env:ARTIFACT_DIR/build-artifact.json" -Raw | ConvertFrom-Json
+          "RELEASE_IMAGE=$($artifact.image)" >> $env:GITHUB_ENV
+          docker pull $artifact.image
+      - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 syft
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: syft-sbom
+          path: ${{ env.ARTIFACT_DIR }}/sbom.cyclonedx.json
+          if-no-files-found: ignore
 
   grype:
-    needs: [syft, semgrep]
-    runs-on: [self-hosted, live, 1imooo]
+    needs: syft
+    runs-on: self-hosted
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      cancel-in-progress: true
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: pwsh ./release/steps/grype.ps1 live
+      - uses: actions/download-artifact@v4
+        with:
+          name: syft-sbom
+          path: ${{ env.ARTIFACT_DIR }}
+      - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 grype
 
   trivy:
-    needs: grype
-    runs-on: [self-hosted, live, 1imooo]
+    needs: build
+    runs-on: self-hosted
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      cancel-in-progress: true
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: pwsh ./release/steps/trivy.ps1 live
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: Inject release image
+        shell: pwsh
+        run: |
+          $artifact = Get-Content "$env:ARTIFACT_DIR/build-artifact.json" -Raw | ConvertFrom-Json
+          "RELEASE_IMAGE=$($artifact.image)" >> $env:GITHUB_ENV
+          docker pull $artifact.image
+      - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 trivy
 
-  sonar:
-    needs: trivy
-    runs-on: [self-hosted, live, 1imooo]
+  deploy:
+    if: github.event_name != 'schedule' && github.ref == 'refs/heads/main'
+    needs: [gitleaks, unit-test, semgrep, sonar, build, syft, grype, trivy]
+    runs-on: self-hosted
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}-deploy
+      cancel-in-progress: false
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: pwsh ./release/steps/sonar.ps1 live
-
-  push:
-    needs: sonar
-    runs-on: [self-hosted, live, 1imooo]
-    steps:
-      - uses: actions/checkout@v4
-      - run: pwsh ./release/steps/push.ps1 live
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: ${{ env.ARTIFACT_DIR }}
+      - name: Inject release image
+        shell: pwsh
+        run: |
+          $artifact = Get-Content "$env:ARTIFACT_DIR/build-artifact.json" -Raw | ConvertFrom-Json
+          "RELEASE_IMAGE=$($artifact.image)" >> $env:GITHUB_ENV
+      - name: Skip stale deploys
+        id: deploy-check
+        shell: pwsh
+        run: |
+          git fetch --no-tags --depth=1 origin $env:GITHUB_REF_NAME
+          $head = (git rev-parse HEAD).Trim()
+          $tip = (git rev-parse "origin/$env:GITHUB_REF_NAME").Trim()
+          if ($head -ne $tip) {
+            Write-Host "Skipping deploy for stale commit $head; branch tip is $tip."
+            "deploy=false" >> $env:GITHUB_OUTPUT
+            return
+          }
+          "deploy=true" >> $env:GITHUB_OUTPUT
+      - if: steps.deploy-check.outputs.deploy == 'true'
+        run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 deploy

@@ -4,11 +4,11 @@ class Elastic {
     [string]$Env
 
     Elastic() {
-        if (-not $env:ES_URL) { throw '[!] ES_URL is required' }
+        if (-not $env:ELASTIC_URL) { throw '[!] ELASTIC_URL is required' }
         if (-not $env:ENV) { throw '[!] ENV is required' }
         if (-not $env:ELASTIC_USER) { throw '[!] ELASTIC_USER is required' }
         if (-not $env:ELASTIC_PASSWORD) { throw '[!] ELASTIC_PASSWORD is required' }
-        $this.Url = $env:ES_URL
+        $this.Url = $env:ELASTIC_URL
         $this.Env = $env:ENV
         $this.UserPass = "$($env:ELASTIC_USER):$($env:ELASTIC_PASSWORD)"
     }

@@ -5,11 +5,11 @@ class Grafana {
     [string]$ProjectName
 
     Grafana([string]$ProjectName) {
-        if (-not $env:GRAFANA_URL) { throw '[!] GRAFANA_URL is required' }
+        if (-not $env:GRAFANA_URL_PUBLIC) { throw '[!] GRAFANA_URL_PUBLIC is required' }
         if (-not $env:GRAFANA_ADMIN_USER) { throw '[!] GRAFANA_ADMIN_USER is required' }
         if (-not $env:GRAFANA_ADMIN_PASSWORD) { throw '[!] GRAFANA_ADMIN_PASSWORD is required' }
         if (-not $env:ENV) { throw '[!] ENV is required' }
-        $this.Url = $env:GRAFANA_URL
+        $this.Url = $env:GRAFANA_URL_PUBLIC
         $this.UserPass = "$($env:GRAFANA_ADMIN_USER):$($env:GRAFANA_ADMIN_PASSWORD)"
         $this.Env = $env:ENV
         $this.ProjectName = $ProjectName

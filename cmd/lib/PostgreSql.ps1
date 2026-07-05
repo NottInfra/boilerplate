@@ -2,13 +2,13 @@ class PostgreSql {
     [string]$DbUrl
 
     PostgreSql() {
-        if (-not $env:DB_URL) { throw '[!] DB_URL is required' }
-        $this.DbUrl = $env:DB_URL
+        if (-not $env:DB_URL_PUBLIC) { throw '[!] DB_URL_PUBLIC is required' }
+        $this.DbUrl = $env:DB_URL_PUBLIC
     }
 
     hidden [string] DbNameFromUrl([string]$Url) {
         if ($Url -match 'postgresql://[^/]+/([^?]+)') { return $Matches[1] }
-        throw '[!] cannot parse database name from DB_URL'
+        throw '[!] cannot parse database name from DB_URL_PUBLIC'
     }
 
     hidden [string] AdminUrl([string]$Url) {

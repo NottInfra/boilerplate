@@ -5,9 +5,9 @@ class DefectDojo {
     [int]$EngagementId
 
     DefectDojo([string]$ProjectName) {
-        if (-not $env:DEFECT_DOJO_URL) { throw '[!] DEFECT_DOJO_URL is required' }
+        if (-not $env:DEFECT_DOJO_URL_PUBLIC) { throw '[!] DEFECT_DOJO_URL_PUBLIC is required' }
         if (-not $env:DEFECT_DOJO_API_TOKEN) { throw '[!] DEFECT_DOJO_API_TOKEN is required' }
-        $this.Url = $env:DEFECT_DOJO_URL.TrimEnd('/')
+        $this.Url = $env:DEFECT_DOJO_URL_PUBLIC.TrimEnd('/')
         $this.Token = $env:DEFECT_DOJO_API_TOKEN
         $this.ProjectName = $ProjectName
         if ($env:DEFECT_DOJO_ENGAGEMENT_ID) {

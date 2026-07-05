@@ -13,8 +13,18 @@ class Registry {
         if ($LASTEXITCODE -ne 0) { throw '[!] docker build failed' }
     }
 
+    [void] Pull() {
+        & docker pull $this.Image
+        if ($LASTEXITCODE -ne 0) { throw "[!] docker pull failed: $($this.Image)" }
+    }
+
     [void] Push() {
         & docker push $this.Image
         if ($LASTEXITCODE -ne 0) { throw "[!] docker push failed: $($this.Image)" }
+    }
+
+    [void] Tag([string]$TargetImage) {
+        & docker tag $this.Image $TargetImage
+        if ($LASTEXITCODE -ne 0) { throw "[!] docker tag failed: $($this.Image) -> $TargetImage" }
     }
 }
