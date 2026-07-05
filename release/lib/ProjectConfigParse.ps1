@@ -1,10 +1,21 @@
 class ProjectConfigParse {
-    hidden [string]$File
+    hidden [string]$ConfigPath
     hidden [hashtable]$Tree
     [string]$Name
     [string]$Env
     [string]$Root
     [string]$Image
+
+    static [string] ReadProjectName([string]$RepoRoot) {
+        $cfgPath = Join-Path $RepoRoot 'project.cfg'
+        if (-not (Test-Path $cfgPath)) { throw "[!] missing $cfgPath" }
+        foreach ($line in Get-Content $cfgPath) {
+            if ($line -match '^\s*project:\s*(.+)$') {
+                return $line.Split(':', 2)[1].Trim().Trim('"').Trim("'")
+            }
+        }
+        throw '[!] project name required in project.cfg'
+    }
 
     ProjectConfigParse([string]$Env) {
         if ($Env -notin @('live', 'test')) { throw '[!] env required: live|test' }
@@ -13,14 +24,26 @@ class ProjectConfigParse {
         $repoRoot = (Resolve-Path $repoRoot).Path
         Set-Location $repoRoot
         $this.Env = $Env
-        $this.File = Join-Path $repoRoot 'project.cfg'
-        if (-not (Test-Path $this.File)) { throw "[!] missing $($this.File)" }
+        $this.ConfigPath = Join-Path $repoRoot 'project.cfg'
+        if (-not (Test-Path $this.ConfigPath)) { throw "[!] missing $($this.ConfigPath)" }
         $this.Tree = $this.ReadYaml()
         $this.Name = [string]$this.Get('project')
         if ([string]::IsNullOrWhiteSpace($this.Name)) { throw '[!] project name required in project.cfg' }
         $tag = if ($Env -eq 'live') { 'prod' } else { 'test' }
         $this.Root = $repoRoot
         $this.Image = "$($env:REGISTRY_URL)/$($this.Name):$tag"
+    }
+
+    [string] ReleaseImage() {
+        if ($env:RELEASE_IMAGE) { return $env:RELEASE_IMAGE }
+        return $this.Image
+    }
+
+    [string] BuildImage() {
+        if ($env:RELEASE_IMAGE) { return $env:RELEASE_IMAGE }
+        $sha = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } elseif ($env:CI_COMMIT_SHA) { $env:CI_COMMIT_SHA } else { '' }
+        if ($sha) { return "$($env:REGISTRY_URL)/$($this.Name):ci-$sha" }
+        return $this.Image
     }
 
     [object] Get([string]$Path) {
@@ -40,7 +63,7 @@ class ProjectConfigParse {
         $doc = [ordered]@{}
         $stack = [System.Collections.Generic.List[object]]::new()
         $stack.Add([ordered]@{ Map = $doc; Indent = -1 })
-        $lines = Get-Content $this.File
+        $lines = Get-Content $this.ConfigPath
 
         for ($i = 0; $i -lt $lines.Count; $i++) {
             $line = $lines[$i]
@@ -55,7 +78,7 @@ class ProjectConfigParse {
                 foreach ($k in $map.Keys) {
                     if ($map[$k] -is [System.Collections.Generic.List[object]]) { $listKey = $k }
                 }
-                if (-not $listKey) { throw "[!] invalid list in $($this.File): $line" }
+                if (-not $listKey) { throw "[!] invalid list in $($this.ConfigPath): $line" }
                 [void]$map[$listKey].Add($value)
                 continue
             }

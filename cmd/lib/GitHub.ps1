@@ -1,13 +1,94 @@
-class GitHub : GitRemote {
+class GitHub {
+    [string]$Remote
+    [string]$LocalPath
+    [string]$Repo
     [bool]$HasGh
 
-    GitHub([string]$Remote, [string]$LocalPath) : base($Remote, $LocalPath) {
+    GitHub([string]$Remote, [string]$LocalPath) {
+        $this.Remote = $Remote
+        $this.LocalPath = $LocalPath
         $this.HasGh = [bool](Get-Command gh -ErrorAction SilentlyContinue)
         if (-not $this.HasGh) { throw '[!] gh CLI required' }
     }
 
+    [void] Sync() {
+        if (Test-Path (Join-Path $this.LocalPath '.git')) {
+            & git -C $this.LocalPath fetch origin 2>&1 | Out-Null
+            & git -C $this.LocalPath checkout main 2>$null
+            if ($LASTEXITCODE -ne 0) { & git -C $this.LocalPath checkout master 2>$null }
+            & git -C $this.LocalPath pull --ff-only 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "[!] git pull failed in $($this.LocalPath)" }
+            return
+        }
+        if (Test-Path $this.LocalPath) { Remove-Item -Recurse -Force $this.LocalPath }
+        $parent = Split-Path $this.LocalPath -Parent
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        & git clone $this.Remote $this.LocalPath 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "[!] git clone failed: $($this.Remote)" }
+    }
+
+    [void] WriteFile([string]$RelativePath, [string]$SourcePath) {
+        $dest = Join-Path $this.LocalPath $RelativePath
+        $parent = Split-Path $dest -Parent
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        Copy-Item -Path $SourcePath -Destination $dest -Force
+    }
+
+    [void] WriteContent([string]$RelativePath, [string]$Content) {
+        $dest = Join-Path $this.LocalPath $RelativePath
+        $parent = Split-Path $dest -Parent
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        Set-Content -Path $dest -Value $Content -NoNewline
+    }
+
+    [void] CommitAndPush([string]$Message) {
+        & git -C $this.LocalPath add -A 2>&1 | Out-Null
+        & git -C $this.LocalPath diff --cached --quiet 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host '[=] no IaC changes'
+            return
+        }
+        & git -C $this.LocalPath commit -m $Message 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw '[!] git commit failed' }
+        & git -C $this.LocalPath push origin HEAD 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw '[!] git push failed' }
+        Write-Host "[+] IaC pushed: $Message"
+    }
+
+    [bool] LocalBranchExists([string]$Name) {
+        & git -C $this.LocalPath show-ref --verify --quiet "refs/heads/$Name"
+        return $LASTEXITCODE -eq 0
+    }
+
+    [bool] RemoteBranchExists([string]$RemoteName, [string]$BranchName) {
+        $out = & git -C $this.LocalPath ls-remote --exit-code --heads $RemoteName $BranchName 2>&1
+        if ($LASTEXITCODE -eq 0) { return $true }
+        if ($LASTEXITCODE -eq 2) { return $false }
+        throw "[!] git ls-remote failed: $RemoteName/$BranchName ($out)"
+    }
+
+    [string] CreateBranch([string]$Name, [string]$RemoteName) {
+        $branch = $Name
+        if ($this.LocalBranchExists($branch) -or $this.RemoteBranchExists($RemoteName, $branch)) {
+            $shortSha = (& git -C $this.LocalPath rev-parse --short HEAD).Trim()
+            $branch = "$Name-$shortSha"
+        }
+        $suffix = 2
+        while ($this.LocalBranchExists($branch) -or $this.RemoteBranchExists($RemoteName, $branch)) {
+            $branch = "$Name-$suffix"
+            $suffix++
+        }
+        & git -C $this.LocalPath branch $branch 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "[!] git branch failed: $branch" }
+        return $branch
+    }
+
+    [void] PushBranch([string]$RemoteName, [string]$BranchName) {
+        $out = & git -C $this.LocalPath push $RemoteName "${BranchName}:${BranchName}" 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "[!] git push failed: $BranchName ($out)" }
+    }
+
     [void] CreateRepo([string]$Owner, [string]$Name, [bool]$Private = $true) {
-        if (-not $this.HasGh) { throw '[!] gh CLI required' }
         $vis = if ($Private) { '--private' } else { '--public' }
         & gh repo create "$Owner/$Name" $vis --confirm 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "[!] gh repo create failed: $Owner/$Name" }
@@ -15,39 +96,19 @@ class GitHub : GitRemote {
     }
 
     [void] SetSecret([string]$Repo, [string]$Name, [string]$Value) {
-        if (-not $this.HasGh) { throw '[!] gh CLI required' }
         $Value | & gh secret set $Name --body - -R $Repo 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "[!] gh secret set failed: $Name" }
         Write-Host "[+] GitHub ${Repo}: secret $Name"
     }
 
-    [void] ScheduleCi([string]$Workflow = 'deploy-live.yml', [string]$Cron = '0 0 * * *') {
-        if (-not $this.HasGh) { throw '[!] gh CLI required' }
-        $this.Sync()
-        $file = Join-Path $this.LocalPath ".github/workflows/$Workflow"
-        if (-not (Test-Path $file)) { throw "[!] missing workflow: $Workflow" }
-        $yaml = Get-Content $file -Raw
-        if ($yaml -match '(?m)^\s+schedule:') {
-            Write-Host "[+] GitHub schedule exists: $Workflow"
-            return
-        }
-        $block = @"
-
-  schedule:
-    - cron: '$Cron'
-"@
-        if ($yaml -notmatch '(?m)^on:\s*$') { throw '[!] workflow missing on: block' }
-        $updated = $yaml -replace '(?m)(^  workflow_dispatch:\s*\r?\n)', "`$1$block"
-        if ($updated -eq $yaml) { throw '[!] could not inject schedule into workflow' }
-        Set-Content -Path $file -Value $updated.TrimEnd() -NoNewline
-        $this.CommitAndPush("ci: schedule $Workflow every 24h")
-        Write-Host "[+] GitHub schedule added: $Workflow ($Cron)"
+    [void] SetVariable([string]$Repo, [string]$Name, [string]$Value) {
+        $Value | & gh variable set $Name --body - -R $Repo 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "[!] gh variable set failed: $Name" }
+        Write-Host "[+] GitHub ${Repo}: variable $Name"
     }
 
     [string] CreatePullRequest([string]$SourceBranch, [string]$TargetBranch, [string]$Title) {
-        if (-not $this.HasGh) { throw '[!] gh CLI required' }
-        $repo = ([GitRemote]::ParseUrl($this.Remote)).Path
-        $out = & gh pr create --repo $repo --base $TargetBranch --head $SourceBranch --title $Title --body $Title 2>&1
+        $out = & gh pr create --repo $this.Repo --base $TargetBranch --head $SourceBranch --title $Title --body $Title 2>&1
         if ($LASTEXITCODE -ne 0) { throw "[!] gh pr create failed: $out" }
         $url = ($out | Select-Object -Last 1).ToString().Trim()
         Write-Host "[+] GitHub PR created: $url"

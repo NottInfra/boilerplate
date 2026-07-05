@@ -62,9 +62,9 @@ class DefectDojo {
 
     hidden [string] StagingFromEnv() {
         switch ($env:ENV.ToLower()) {
-            { $_ -in @('production', 'live', 'prod') } { return 'live' }
+            'live' { return 'live' }
             { $_ -in @('test', 'development') } { return 'test' }
-            default { throw "[!] ENV must be development, test, or production (got $env:ENV)" }
+            default { throw "[!] ENV must be development, test, or live (got $env:ENV)" }
         }
     }
 

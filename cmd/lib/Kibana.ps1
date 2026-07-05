@@ -71,9 +71,10 @@ class Kibana {
         }
     }
 
-    [void] ApplyAlertingRules([string]$RulesFile) {
+    [void] ApplyAlertingRules() {
+        if (-not (Test-Path 'alerts/kibana.json')) { throw '[!] Missing alerts/kibana.json' }
         Write-Host "== Kibana alerting rules: $($this.Url) (ENV=$($this.Env)) =="
-        $rules = Get-Content $RulesFile -Raw | ConvertFrom-Json
+        $rules = Get-Content 'alerts/kibana.json' -Raw | ConvertFrom-Json
         foreach ($rule in $rules) {
             $id = $rule.id
             Write-Host "   → $id"

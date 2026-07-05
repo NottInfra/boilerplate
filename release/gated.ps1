@@ -1,11 +1,16 @@
 #!/usr/bin/env pwsh
-# Gated pipeline — build, test, scan, sonar (PR mode). No push/deploy.
 $ErrorActionPreference = 'Stop'
 
 $Env = 'test'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $All = @('gitleaks', 'unit-test', 'semgrep', 'sonar', 'build', 'syft', 'grype', 'trivy')
 $env:RELEASE_PIPELINE = 'gated'
+
+. (Join-Path $PSScriptRoot 'lib/Vault.ps1')
+. (Join-Path $PSScriptRoot 'lib/ProjectConfigParse.ps1')
+$name = [ProjectConfigParse]::ReadProjectName($Root)
+[Vault]::new().LoadEnv($name)
+$project = [ProjectConfigParse]::new($Env)
 
 $step = if ($args[0]) { $args[0] } else { 'all' }
 if ($step -eq 'scan') { $step = 'trivy' }

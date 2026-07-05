@@ -1,31 +1,27 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
+. "$PSScriptRoot/lib/Env.ps1"
 . "$PSScriptRoot/lib/ProjectConfigParse.ps1"
-. "$PSScriptRoot/lib/GitRemote.ps1"
 . "$PSScriptRoot/lib/GitHub.ps1"
 . "$PSScriptRoot/lib/GitLab.ps1"
+. "$PSScriptRoot/lib/SourceControl.ps1"
 
-$Root = (git rev-parse --show-toplevel 2>$null)
-if (-not $Root) { $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
-Set-Location $Root
+[void][Env]::new()
 
-$compose = Join-Path $Root 'compose.yml'
-if (-not (Test-Path $compose)) { throw '[!] Missing compose.yml' }
+if (-not (Test-Path 'compose.yml')) { throw '[!] Missing compose.yml' }
 
-$project = [ProjectConfigParse]::new((Join-Path $Root 'project.cfg'))
-$content = (Get-Content $compose -Raw) -replace '@PROJECT@', $project.Name
+$project = [ProjectConfigParse]::new()
+$content = (Get-Content 'compose.yml' -Raw) -replace '@PROJECT@', $project.Name
 
-$iacGit = $project.Require('remotes.iac.url')
-$workDir = Join-Path ([IO.Path]::GetTempPath()) "iac-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+$git = [SourceControl]::new($project.Require('remotes.iac.url'))
 try {
-    $git = [GitRemote]::ForRemote($iacGit, $workDir)
     $git.Sync()
     $iacPath = "docker/$($project.Name)/compose.yml"
     $git.WriteContent($iacPath, $content)
     $git.CommitAndPush("app-config: $($project.Name)")
-    Write-Host "[+] Done — app compose → $iacPath"
+    Write-Host "[+] Done — app compose → $iacPath ($($env:ENV))"
 }
 finally {
-    Remove-Item -Recurse -Force $workDir -ErrorAction SilentlyContinue
+    $git.Cleanup()
 }

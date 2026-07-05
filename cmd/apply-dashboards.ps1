@@ -9,15 +9,9 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/lib/PostHog.ps1"
 . "$PSScriptRoot/lib/DefectDojo.ps1"
 
-$Root = (git rev-parse --show-toplevel 2>$null)
-if (-not $Root) { $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
-Set-Location $Root
+[void][Env]::new()
 
-$dirs = @(
-    (Join-Path $Root 'dashboards/grafana')
-    (Join-Path $Root 'dashboards/kibana')
-    (Join-Path $Root 'dashboards/posthog')
-)
+$dirs = @('dashboards/grafana', 'dashboards/kibana', 'dashboards/posthog')
 $hasAny = $false
 foreach ($d in $dirs) {
     if (Test-Path $d) {
@@ -27,33 +21,27 @@ foreach ($d in $dirs) {
 }
 if (-not $hasAny) { throw '[!] No dashboards found under dashboards/{grafana,kibana,posthog}/' }
 
-[void][Env]::new($Root)
+$project = [ProjectConfigParse]::new()
 
-$project = [ProjectConfigParse]::new((Join-Path $Root 'project.cfg'))
-$name = $project.Name
+Write-Host "[+] Applying dashboards (ENV=$($env:ENV), project=$($project.Name))"
 
-Write-Host "[+] Applying dashboards (ENV=$($env:ENV), project=$name)"
+[Elastic]::new($project.Name).CreateStream()
 
-[Elastic]::new().CreateStream($name)
-
-$kibanaDir = Join-Path $Root 'dashboards/kibana'
-if ((Get-ChildItem $kibanaDir -Filter '*.ndjson' -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })) {
-    [Kibana]::new($name).ImportDir($kibanaDir)
+if ((Get-ChildItem 'dashboards/kibana' -Filter '*.ndjson' -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })) {
+    [Kibana]::new($project.Name).ImportDir('dashboards/kibana')
 }
 
-$grafanaDir = Join-Path $Root 'dashboards/grafana'
-if ((Get-ChildItem $grafanaDir -Filter '*.json' -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })) {
-    [Grafana]::new($name).ImportDir($grafanaDir)
+if ((Get-ChildItem 'dashboards/grafana' -Filter '*.json' -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })) {
+    [Grafana]::new($project.Name).ImportDir('dashboards/grafana')
 }
 
 $envHints = [System.Collections.Generic.List[string]]::new()
 $posthog = $null
 
-$posthogDir = Join-Path $Root 'dashboards/posthog'
-if ((Get-ChildItem $posthogDir -Filter '*.json' -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })) {
+if ((Get-ChildItem 'dashboards/posthog' -Filter '*.json' -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })) {
     if ($env:POSTHOG_URL -and $env:POSTHOG_API_KEY) {
-        $posthog = [PostHog]::new($name)
-        $posthog.ImportDir($posthogDir)
+        $posthog = [PostHog]::new($project.Name)
+        $posthog.ImportDir('dashboards/posthog')
         if ($posthog.ResolvedProjectId) {
             $envHints.Add("POSTHOG_PROJECT_ID=$($posthog.ProjectId)")
         }
@@ -64,7 +52,7 @@ if ((Get-ChildItem $posthogDir -Filter '*.json' -File -ErrorAction SilentlyConti
 }
 
 if ($env:DEFECT_DOJO_URL_PUBLIC -and $env:DEFECT_DOJO_API_TOKEN) {
-    $dojo = [DefectDojo]::new($name)
+    $dojo = [DefectDojo]::new($project.Name)
     $engId = $dojo.EnsureEngagement()
     if (-not $env:DEFECT_DOJO_ENGAGEMENT_ID) {
         $envHints.Add("DEFECT_DOJO_ENGAGEMENT_ID=$engId")

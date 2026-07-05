@@ -1,67 +1,137 @@
-class GitLab : GitRemote {
-    [string]$ApiUrl
-    [string]$Token
+class GitLab {
+    [string]$Remote
+    [string]$LocalPath
+    [string]$Repo
+    [string]$WebUrl
 
-    GitLab([string]$Remote, [string]$LocalPath) : base($Remote, $LocalPath) {
+    GitLab([string]$Remote, [string]$LocalPath) {
+        $this.Remote = $Remote
+        $this.LocalPath = $LocalPath
         if (-not $env:GITLAB_URL_PUBLIC) { throw '[!] GITLAB_URL_PUBLIC is required' }
-        if (-not $env:GITLAB_TOKEN) { throw '[!] GITLAB_TOKEN is required' }
-        $this.ApiUrl = $env:GITLAB_URL_PUBLIC.TrimEnd('/')
-        $this.Token = $env:GITLAB_TOKEN
+        $this.WebUrl = $env:GITLAB_URL_PUBLIC.TrimEnd('/')
     }
 
-    [object] Api([string]$Path, [string]$Method = 'Get', [object]$Body = $null) {
-        $uri = "$($this.ApiUrl)/api/v4$Path"
-        $headers = @{ 'PRIVATE-TOKEN' = $this.Token }
-        $params = @{ Uri = $uri; Method = $Method; Headers = $headers; ErrorAction = 'Stop' }
-        if ($null -ne $Body) {
-            $params.ContentType = 'application/json'
-            $params.Body = ($Body | ConvertTo-Json -Depth 10 -Compress)
-        }
-        return Invoke-RestMethod @params
-    }
-
-    [void] CreateRepo([string]$Name, [string]$NamespaceId = '', [bool]$Private = $true) {
-        $body = @{
-            name                   = $Name
-            path                   = $Name
-            visibility             = if ($Private) { 'private' } else { 'public' }
-            initialize_with_readme = $false
-        }
-        if ($NamespaceId) { $body.namespace_id = $NamespaceId }
-        [void]$this.Api('/projects', 'Post', $body)
-        Write-Host "[+] GitLab project created: $Name"
-    }
-
-    [void] ScheduleCi([string]$Ref, [string]$Description = 'Daily CI', [string]$Cron = '0 0 * * *') {
-        $projectPath = [uri]::EscapeDataString([GitRemote]::ParseUrl($this.Remote).Path)
-        $project = $this.Api("/projects/$projectPath")
-        $schedules = @($this.Api("/projects/$($project.id)/pipeline_schedules"))
-        $existing = $schedules | Where-Object { $_.ref -eq $Ref -and $_.cron -eq $Cron } | Select-Object -First 1
-        $body = @{
-            description   = $Description
-            ref           = $Ref
-            cron          = $Cron
-            cron_timezone = 'UTC'
-            active        = $true
-        }
-        if ($existing) {
-            [void]$this.Api("/projects/$($project.id)/pipeline_schedules/$($existing.id)", 'Put', $body)
-            Write-Host "[+] GitLab pipeline schedule updated: $Cron on $Ref"
+    [void] Sync() {
+        if (Test-Path (Join-Path $this.LocalPath '.git')) {
+            & git -C $this.LocalPath fetch origin 2>&1 | Out-Null
+            & git -C $this.LocalPath checkout main 2>$null
+            if ($LASTEXITCODE -ne 0) { & git -C $this.LocalPath checkout master 2>$null }
+            & git -C $this.LocalPath pull --ff-only 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "[!] git pull failed in $($this.LocalPath)" }
             return
         }
-        [void]$this.Api("/projects/$($project.id)/pipeline_schedules", 'Post', $body)
-        Write-Host "[+] GitLab pipeline schedule created: $Cron on $Ref"
+        if (Test-Path $this.LocalPath) { Remove-Item -Recurse -Force $this.LocalPath }
+        $parent = Split-Path $this.LocalPath -Parent
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        & git clone $this.Remote $this.LocalPath 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "[!] git clone failed: $($this.Remote)" }
+    }
+
+    [void] WriteFile([string]$RelativePath, [string]$SourcePath) {
+        $dest = Join-Path $this.LocalPath $RelativePath
+        $parent = Split-Path $dest -Parent
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        Copy-Item -Path $SourcePath -Destination $dest -Force
+    }
+
+    [void] WriteContent([string]$RelativePath, [string]$Content) {
+        $dest = Join-Path $this.LocalPath $RelativePath
+        $parent = Split-Path $dest -Parent
+        if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        Set-Content -Path $dest -Value $Content -NoNewline
+    }
+
+    [void] CommitAndPush([string]$Message) {
+        & git -C $this.LocalPath add -A 2>&1 | Out-Null
+        & git -C $this.LocalPath diff --cached --quiet 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host '[=] no IaC changes'
+            return
+        }
+        & git -C $this.LocalPath commit -m $Message 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw '[!] git commit failed' }
+        & git -C $this.LocalPath push origin HEAD 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw '[!] git push failed' }
+        Write-Host "[+] IaC pushed: $Message"
+    }
+
+    [bool] LocalBranchExists([string]$Name) {
+        & git -C $this.LocalPath show-ref --verify --quiet "refs/heads/$Name"
+        return $LASTEXITCODE -eq 0
+    }
+
+    [bool] RemoteBranchExists([string]$RemoteName, [string]$BranchName) {
+        $out = & git -C $this.LocalPath ls-remote --exit-code --heads $RemoteName $BranchName 2>&1
+        if ($LASTEXITCODE -eq 0) { return $true }
+        if ($LASTEXITCODE -eq 2) { return $false }
+        throw "[!] git ls-remote failed: $RemoteName/$BranchName ($out)"
+    }
+
+    [string] CreateBranch([string]$Name, [string]$RemoteName) {
+        $branch = $Name
+        if ($this.LocalBranchExists($branch) -or $this.RemoteBranchExists($RemoteName, $branch)) {
+            $shortSha = (& git -C $this.LocalPath rev-parse --short HEAD).Trim()
+            $branch = "$Name-$shortSha"
+        }
+        $suffix = 2
+        while ($this.LocalBranchExists($branch) -or $this.RemoteBranchExists($RemoteName, $branch)) {
+            $branch = "$Name-$suffix"
+            $suffix++
+        }
+        & git -C $this.LocalPath branch $branch 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "[!] git branch failed: $branch" }
+        return $branch
+    }
+
+    [void] PushBranch([string]$RemoteName, [string]$BranchName) {
+        $out = & git -C $this.LocalPath push $RemoteName "${BranchName}:${BranchName}" 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "[!] git push failed: $BranchName ($out)" }
+    }
+
+    [void] SetVariable([string]$Key, [string]$Value) {
+        $this.SetVariable($Key, $Value, $false, $false)
+    }
+
+    [void] SetVariable([string]$Key, [string]$Value, [bool]$Masked) {
+        $this.SetVariable($Key, $Value, $Masked, $false)
+    }
+
+    [void] SetVariable([string]$Key, [string]$Value, [bool]$Masked, [bool]$Protected) {
+        if (-not $env:GITLAB_TOKEN) { throw '[!] GITLAB_TOKEN is required' }
+        $headers = @{ 'PRIVATE-TOKEN' = $env:GITLAB_TOKEN }
+        $payload = @{
+            key                 = $Key
+            value               = $Value
+            protected           = $Protected
+            masked              = $Masked
+            environment_scope   = '*'
+            variable_type       = 'env_var'
+        }
+        $body = ($payload | ConvertTo-Json -Compress)
+        $base = "$($this.WebUrl)/api/v4/projects/$([uri]::EscapeDataString($this.Repo))/variables"
+        try {
+            Invoke-RestMethod -Method Put -Uri "$base/$Key" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+        }
+        catch {
+            $status = $null
+            if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+            if ($status -ne 404) { throw "[!] GitLab variable update failed: $Key ($($_.Exception.Message))" }
+            Invoke-RestMethod -Method Post -Uri $base -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+        }
+        $flags = if ($Protected) { 'protected' } else { 'unprotected' }
+        if ($Masked) { $flags += ', masked' }
+        Write-Host "[+] GitLab $($this.Repo): variable $Key ($flags)"
     }
 
     [string] CreatePullRequest([string]$SourceBranch, [string]$TargetBranch, [string]$Title) {
-        $projectPath = [uri]::EscapeDataString([GitRemote]::ParseUrl($this.Remote).Path)
-        $project = $this.Api("/projects/$projectPath")
-        $mr = $this.Api("/projects/$($project.id)/merge_requests", 'Post', @{
-            source_branch = $SourceBranch
-            target_branch = $TargetBranch
-            title         = $Title
-        })
-        Write-Host "[+] GitLab MR created: $($mr.web_url)"
-        return $mr.web_url
+        $query = @(
+            "merge_request%5Bsource_branch%5D=$([uri]::EscapeDataString($SourceBranch))"
+            "merge_request%5Btarget_branch%5D=$([uri]::EscapeDataString($TargetBranch))"
+            "merge_request%5Btitle%5D=$([uri]::EscapeDataString($Title))"
+        ) -join '&'
+        $url = "$($this.WebUrl)/$($this.Repo)/-/merge_requests/new?$query"
+        if (Get-Command open -ErrorAction SilentlyContinue) { & open $url }
+        Write-Host "[+] GitLab MR: $url"
+        return $url
     }
 }

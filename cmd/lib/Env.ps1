@@ -1,16 +1,20 @@
+$script:CmdLibDir = $PSScriptRoot
+
 class Env {
-    [string]$Root
     [string]$LoadedFile
     [string]$Name
 
-    Env([string]$Root) {
-        $this.Root = $Root
+    Env() {
+        $top = git rev-parse --show-toplevel 2>$null
+        if ($top) { Set-Location (Resolve-Path $top).Path }
+        else { Set-Location (Resolve-Path (Join-Path $script:CmdLibDir '../..')).Path }
+
         if ($env:ENV_FILE) {
-            $path = if ([IO.Path]::IsPathRooted($env:ENV_FILE)) { $env:ENV_FILE } else { Join-Path $Root $env:ENV_FILE }
+            $path = if ([IO.Path]::IsPathRooted($env:ENV_FILE)) { $env:ENV_FILE } else { $env:ENV_FILE }
             $this.Load($path)
         }
         elseif ($env:ENV) {
-            $this.Load((Join-Path $Root $this.FileForName($env:ENV)))
+            $this.Load($this.FileForName($env:ENV))
         }
         else {
             $this.Pick()
@@ -23,14 +27,22 @@ class Env {
         switch ($Name.ToLower()) {
             'development' { return '.env.development' }
             'test' { return '.env.test' }
-            'production' { return '.env.production' }
-            'live' { return '.env.production' }
+            'live' { return '.env.live' }
         }
-        throw "[!] unknown ENV: $Name (expected development, test, production)"
+        throw "[!] unknown ENV: $Name (expected development, test, live)"
     }
 
-    [void] Load([string]$File) {
+    [string] VaultStaging() {
+        switch ($this.Name.ToLower()) {
+            'live' { return 'live' }
+            'test' { return 'test' }
+        }
+        throw "[!] apply-env only pushes test/live env files (selected ENV=$($this.Name))"
+    }
+
+    [hashtable] ParseFile([string]$File) {
         if (-not (Test-Path $File)) { throw "[!] missing env file: $File" }
+        $data = @{}
         foreach ($line in Get-Content $File) {
             if ($line -match '^\s*#' -or $line -match '^\s*$') { continue }
             if ($line -match '^([^=]+)=(.*)$') {
@@ -38,8 +50,16 @@ class Env {
                 $val = $Matches[2].Trim()
                 if ($val -match '^"(.*)"$') { $val = $Matches[1] }
                 elseif ($val -match "^'(.*)'$") { $val = $Matches[1] }
-                Set-Item -Path "env:$key" -Value $val
+                $data[$key] = $val
             }
+        }
+        return $data
+    }
+
+    [void] Load([string]$File) {
+        $data = $this.ParseFile($File)
+        foreach ($key in $data.Keys) {
+            Set-Item -Path "env:$key" -Value $data[$key]
         }
         $this.LoadedFile = $File
         $env:ENV_FILE = $File
@@ -47,18 +67,17 @@ class Env {
 
     [void] Pick() {
         $candidates = @(
-            @{ Label = 'development'; Path = Join-Path $this.Root '.env.development' }
-            @{ Label = 'test'; Path = Join-Path $this.Root '.env.test' }
-            @{ Label = 'production'; Path = Join-Path $this.Root '.env.production' }
+            @{ Label = 'development'; Path = '.env.development' }
+            @{ Label = 'test'; Path = '.env.test' }
+            @{ Label = 'live'; Path = '.env.live' }
         ) | Where-Object { Test-Path $_.Path }
 
-        if (-not $candidates) { throw '[!] no env files found (.env.development, .env.test, .env.production)' }
+        if (-not $candidates) { throw '[!] no env files found (.env.development, .env.test, .env.live)' }
 
         Write-Host ''
         Write-Host 'Env file:'
         for ($i = 0; $i -lt $candidates.Count; $i++) {
-            $rel = $candidates[$i].Path.Replace("$($this.Root)/", '').Replace("$($this.Root)\", '')
-            Write-Host "  $($i + 1)) $($candidates[$i].Label)  ← $rel"
+            Write-Host "  $($i + 1)) $($candidates[$i].Label)  ← $($candidates[$i].Path)"
         }
         $choice = Read-Host "Choose [1-$($candidates.Count)]"
         if (-not $choice) { throw '[!] choice required' }

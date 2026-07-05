@@ -79,11 +79,12 @@ class Grafana {
         }
     }
 
-    [void] ApplyAlertingRules([string]$RulesFile) {
+    [void] ApplyAlertingRules() {
+        if (-not (Test-Path 'alerts/grafana.json')) { throw '[!] Missing alerts/grafana.json' }
         Write-Host "== Grafana alerting rules: $($this.Url) (ENV=$($this.Env)) =="
         $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($this.UserPass))
         $headers = @{ Authorization = "Basic $auth" }
-        $doc = Get-Content $RulesFile -Raw | ConvertFrom-Json
+        $doc = Get-Content 'alerts/grafana.json' -Raw | ConvertFrom-Json
         $this.EnsureFolder($doc.folder.uid, $doc.folder.title)
         $folderUid = "$($this.ProjectName)-$($doc.folder.uid)"
         foreach ($rule in $doc.rules) {

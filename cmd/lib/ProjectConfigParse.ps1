@@ -2,43 +2,13 @@ class ProjectConfigParse {
     hidden [string]$File
     hidden [hashtable]$Tree
     [string]$Name
-    [string]$Staging
-    [string]$Domain
-    [string]$Host
-    [string]$Endpoint
-    [string]$Server
-    [string]$HostPort
-    [string]$ContainerPort
-    [string]$RemoteName
-    [string]$RemoteUrl
-    [string]$Branch
-    [string]$Release
 
-    ProjectConfigParse([string]$FilePath) {
-        $this.File = $FilePath
-        if (-not (Test-Path $this.File)) { throw "[!] missing $($this.File)" }
+    ProjectConfigParse() {
+        if (-not (Test-Path 'project.cfg')) { throw '[!] missing project.cfg' }
+        $this.File = (Resolve-Path 'project.cfg').Path
         $this.Tree = $this.ReadYaml()
         $this.Name = [string]$this.Get('project')
         if ([string]::IsNullOrWhiteSpace($this.Name)) { throw '[!] project name required in project.cfg' }
-
-        if (-not $env:ENV) { return }
-
-        $norm = $env:ENV.ToLower()
-        $accepted = @('live', 'test', 'dev', 'development')
-        if ($accepted -notcontains $norm) { throw "[!] ENV must be live, test, dev, or development (got $env:ENV)" }
-        $this.Staging = $norm
-
-        $st = $this.Staging
-        $this.Domain = [string]$this.Get("public.domain")
-        $this.Host = [string]$this.Get("public.host")
-        $this.Endpoint = [string]$this.Get("public.app.$st.endpoint")
-        $this.Server = [string]$this.Get("public.app.$st.server")
-        $this.HostPort = [string]$this.Get("public.app.$st.ports.host")
-        $this.ContainerPort = [string]$this.Get("public.app.$st.ports.container")
-        $this.RemoteName = [string]$this.Get("remotes.$st.remote")
-        $this.RemoteUrl = [string]$this.Get("remotes.$st.url")
-        $this.Branch = [string]$this.Get("remotes.$st.branch")
-        $this.Release = [string]$this.Get("remotes.$st.release")
     }
 
     [object] Get([string]$Path) {

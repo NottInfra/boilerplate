@@ -1,11 +1,16 @@
 #!/usr/bin/env pwsh
-# Live pipeline — build, test, scan, deploy. Deploy is Watchtower on the IaC host.
 $ErrorActionPreference = 'Stop'
 
 $Env = 'live'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $All = @('gitleaks', 'unit-test', 'semgrep', 'sonar', 'build', 'syft', 'grype', 'trivy', 'deploy')
 $env:RELEASE_PIPELINE = 'production'
+
+. (Join-Path $PSScriptRoot 'lib/Vault.ps1')
+. (Join-Path $PSScriptRoot 'lib/ProjectConfigParse.ps1')
+$name = [ProjectConfigParse]::ReadProjectName($Root)
+[Vault]::new().LoadEnv($name)
+$project = [ProjectConfigParse]::new($Env)
 
 $step = if ($args[0]) { $args[0] } else { 'all' }
 if ($step -eq 'scan') { $step = 'trivy' }

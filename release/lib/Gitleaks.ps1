@@ -15,11 +15,10 @@ class Gitleaks {
         if (Test-Path $this.ReportFile) { Remove-Item $this.ReportFile -Force }
         $src = $this.WorkDir
         $report = $this.ReportFile
-        $scanDir = $this.ScanDir
         Write-Host "[+] gitleaks workdir=$src"
         & docker run --rm `
             -v "${src}:${src}" `
-            -v "${scanDir}:${scanDir}" `
+            -v "$($this.ScanDir):$($this.ScanDir)" `
             -w $src `
             zricethezav/gitleaks:v8.21.2 `
             detect --source=$src --report-path=$report --report-format=json --no-banner

@@ -4,52 +4,51 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/lib/Env.ps1"
 . "$PSScriptRoot/lib/ProjectConfigParse.ps1"
 . "$PSScriptRoot/lib/Vault.ps1"
+. "$PSScriptRoot/lib/GitHub.ps1"
+. "$PSScriptRoot/lib/GitLab.ps1"
+. "$PSScriptRoot/lib/SourceControl.ps1"
 
-$Root = (git rev-parse --show-toplevel 2>$null)
-if (-not $Root) { $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
-Set-Location $Root
-
-[void][Env]::new($Root)
-
-$project = [ProjectConfigParse]::new((Join-Path $Root 'project.cfg'))
+$envLoader = [Env]::new()
+$project = [ProjectConfigParse]::new()
 $vault = [Vault]::new()
 $vault.Health()
+
+$staging = $envLoader.VaultStaging()
+$secret = "$staging-$($project.Name)"
+$data = $envLoader.ParseFile($envLoader.LoadedFile)
+$diff = $vault.Compare($secret, $data)
+
+$ciVars = @{
+    VAULT_URL           = $data['VAULT_URL']
+    VAULT_TOKEN         = $data['VAULT_TOKEN']
+    VAULT_SECRET_PREFIX = $staging
+}
+if (-not $ciVars.VAULT_URL) { throw '[!] VAULT_URL missing in env file' }
+if (-not $ciVars.VAULT_TOKEN) { throw '[!] VAULT_TOKEN missing in env file' }
+
+$remoteUrl = $project.Require("remotes.$staging.url")
+$ciLabel = if ($env:ENV -eq 'live') { "GitHub $remoteUrl" } else { "GitLab $remoteUrl" }
 
 Write-Host ''
 Write-Host "Vault @ $($vault.Addr)"
 Write-Host "Project: $($project.Name)"
-
-$stages = @(
-    @{ Staging = 'live'; EnvFile = '.env.production' }
-    @{ Staging = 'test'; EnvFile = '.env.test' }
-)
-Write-Host ''
-Write-Host 'Staging:'
-for ($i = 0; $i -lt $stages.Count; $i++) {
-    $s = $stages[$i]
-    $secret = "$($s.Staging)-$($project.Name)"
-    Write-Host "  $($i + 1)) $($s.Staging)  ← $($s.EnvFile)  → secret/$secret"
+Write-Host "[i] $staging : secret/$secret"
+Write-Host "    source: $($envLoader.LoadedFile)"
+Write-Host "    added=$($diff.Added) changed=$($diff.Changed) unchanged=$($diff.Unchanged) removed=$($diff.Removed)"
+Write-Host "[i] CI → $ciLabel"
+foreach ($key in $ciVars.Keys) {
+    Write-Host "    $key=$($ciVars[$key])"
 }
-Write-Host "  $($stages.Count + 1)) all"
-$choice = Read-Host 'Choose'
-$selected = if ([int]$choice -eq ($stages.Count + 1)) { $stages } else { @($stages[[int]$choice - 1]) }
 
-foreach ($s in $selected) {
-    $envf = Join-Path $Root $s.EnvFile
-    $secret = "$($s.Staging)-$($project.Name)"
-    if (-not (Test-Path $envf)) { throw "[!] missing $($s.EnvFile)" }
-
-    $data = @{}
-    foreach ($line in Get-Content $envf) {
-        if ($line -match '^\s*#' -or $line -match '^\s*$') { continue }
-        if ($line -match '^([^=]+)=(.*)$') {
-            $k = $Matches[1].Trim()
-            $v = $Matches[2].Trim().Trim('"').Trim("'")
-            $data[$k] = $v
-        }
-    }
-    $vault.WriteSecret($secret, $data)
-    Write-Host "[+] $($s.Staging) : secret/$secret updated"
+if ((Read-Host 'Apply? [y/N]') -notmatch '^[yY]$') {
+    Write-Host '[=] skipped'
+    exit 0
 }
+
+$vault.WriteSecret($secret, $data)
+Write-Host "[+] secret/$secret updated"
+
+$ci = [SourceControl]::new($remoteUrl)
+$ci.SetCiVars($ciVars)
 
 Write-Host '[+] Done'

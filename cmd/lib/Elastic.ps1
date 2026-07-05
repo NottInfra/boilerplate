@@ -2,8 +2,12 @@ class Elastic {
     [string]$Url
     [string]$UserPass
     [string]$Env
+    [string]$ProjectName
 
-    Elastic() {
+    Elastic([string]$ProjectName) {
+        if ([string]::IsNullOrWhiteSpace($ProjectName)) { throw '[!] project name required' }
+        $this.ProjectName = $ProjectName
+        
         if (-not $env:ELASTIC_URL) { throw '[!] ELASTIC_URL is required' }
         if (-not $env:ENV) { throw '[!] ENV is required' }
         if (-not $env:ELASTIC_USER) { throw '[!] ELASTIC_USER is required' }
@@ -13,8 +17,8 @@ class Elastic {
         $this.UserPass = "$($env:ELASTIC_USER):$($env:ELASTIC_PASSWORD)"
     }
 
-    [void] CreateStream([string]$ProjectName) {
-        $dataStream = "$ProjectName-logging"
+    [void] CreateStream() {
+        $dataStream = "$($this.ProjectName)-logging"
         $template = @{
             index_patterns = @("${dataStream}*")
             data_stream    = @{}
@@ -45,16 +49,5 @@ class Elastic {
         Write-Host '== field caps =='
         Invoke-RestMethod -Method Get -Uri "$($this.Url)/$dataStream/_field_caps?fields=event,@timestamp" -Headers $headers | Out-Null
     }
-
-    [void] WriteDoc([string]$DataStream, [hashtable]$Fields) {
-        $doc = [ordered]@{ '@timestamp' = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
-        foreach ($k in $Fields.Keys) { $doc[$k] = $Fields[$k] }
-        $headers = @{ 'Content-Type' = 'application/json' }
-        if ($this.UserPass) {
-            $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($this.UserPass))
-            $headers['Authorization'] = "Basic $b64"
-        }
-        $body = ($doc | ConvertTo-Json -Depth 20 -Compress)
-        Invoke-RestMethod -Method Post -Uri "$($this.Url)/$DataStream/_doc" -Headers $headers -Body $body | Out-Null
-    }
 }
+

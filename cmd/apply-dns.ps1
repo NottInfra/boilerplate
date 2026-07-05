@@ -5,13 +5,9 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/lib/ProjectConfigParse.ps1"
 . "$PSScriptRoot/lib/Spaceship.ps1"
 
-$Root = (git rev-parse --show-toplevel 2>$null)
-if (-not $Root) { $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
-Set-Location $Root
+[void][Env]::new()
 
-[void][Env]::new($Root)
-
-$project = [ProjectConfigParse]::new((Join-Path $Root 'project.cfg'))
+$project = [ProjectConfigParse]::new()
 $registry = $project.Require('public.dns.registry')
 $domain = $project.Require('public.domain')
 $pubHost = $project.Require('public.host')

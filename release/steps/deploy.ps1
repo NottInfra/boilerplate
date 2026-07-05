@@ -13,7 +13,7 @@ $elastic = [Elastic]::new($project.Name, $staging)
 $elastic.Step('deploy', 'started')
 
 try {
-    $sourceImage = if ($env:RELEASE_IMAGE) { $env:RELEASE_IMAGE } else { $project.Image }
+    $sourceImage = $project.ReleaseImage()
     if ($sourceImage -ne $project.Image) {
         $source = [Registry]::new($project.Root, $sourceImage)
         $source.Pull()

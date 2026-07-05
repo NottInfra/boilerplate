@@ -21,21 +21,11 @@ try {
     }
 
     $sha = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } elseif ($env:CI_COMMIT_SHA) { $env:CI_COMMIT_SHA } else { '' }
-    $releaseImage = if ($env:RELEASE_IMAGE) {
-        $env:RELEASE_IMAGE
-    }
-    elseif ($sha) {
-        "$($env:REGISTRY_URL)/$($project.Name):ci-$sha"
-    }
-    else {
-        $project.Image
-    }
+    $releaseImage = $project.BuildImage()
 
     $registry = [Registry]::new($project.Root, $releaseImage)
     $registry.Build()
-    if ($sha -or $staging -eq 'test') {
-        $registry.Push()
-    }
+    $registry.Push()
 
     $artifact = [ordered]@{
         image = $releaseImage

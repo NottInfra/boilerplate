@@ -1,16 +1,15 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
+. "$PSScriptRoot/lib/Env.ps1"
 . "$PSScriptRoot/lib/ProjectConfigParse.ps1"
-. "$PSScriptRoot/lib/GitRemote.ps1"
 . "$PSScriptRoot/lib/GitHub.ps1"
 . "$PSScriptRoot/lib/GitLab.ps1"
+. "$PSScriptRoot/lib/SourceControl.ps1"
 
-$Root = (git rev-parse --show-toplevel 2>$null)
-if (-not $Root) { $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path }
-Set-Location $Root
+[void][Env]::new()
 
-$project = [ProjectConfigParse]::new((Join-Path $Root 'project.cfg'))
+$project = [ProjectConfigParse]::new()
 
 $pubDomain = [string]$project.Get('public.domain')
 $rows = [System.Collections.Generic.List[object]]::new()
@@ -33,16 +32,14 @@ foreach ($stage in @('live', 'test')) {
 }
 $json = ($rows | ConvertTo-Json -Depth 10 -Compress)
 
-$iacGit = $project.Require('remotes.iac.url')
-$workDir = Join-Path ([IO.Path]::GetTempPath()) "iac-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+$git = [SourceControl]::new($project.Require('remotes.iac.url'))
 try {
-    $git = [GitRemote]::ForRemote($iacGit, $workDir)
     $git.Sync()
     $iacPath = "docker/blackbox/configs/https/$($project.Name).json"
     $git.WriteContent($iacPath, $json)
     $git.CommitAndPush("blackbox: $($project.Name)")
-    Write-Host "[+] Done — synth-mon → $iacPath"
+    Write-Host "[+] Done — synth-mon → $iacPath ($($env:ENV))"
 }
 finally {
-    Remove-Item -Recurse -Force $workDir -ErrorAction SilentlyContinue
+    $git.Cleanup()
 }
