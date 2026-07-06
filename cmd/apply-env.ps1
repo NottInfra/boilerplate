@@ -15,16 +15,12 @@ $vault.Health()
 
 $staging = $envLoader.VaultStaging()
 $secret = "$staging-$($project.Name)"
+$configSecret = "$staging-$($project.Name)-config"
 $data = $envLoader.ParseFile($envLoader.LoadedFile)
-$diff = $vault.Compare($secret, $data)
+$diffSecret = $vault.Compare($secret, $data)
 
-$settingsPath = 'settings.cfg'
-$settingsData = @{}
-$settingsDiff = @{ Added = 0; Changed = 0; Unchanged = 0; Removed = 0 }
-if (Test-Path $settingsPath) {
-    $settingsData = [Config]::new($settingsPath).VaultFlat()
-    $settingsDiff = $vault.Compare('config', $settingsData)
-}
+$config = [Config]::new('settings.cfg')
+$diffConfig = $vault.Compare($configSecret, $config.Data)
 
 $ciVars = @{
     VAULT_URL           = $data['VAULT_URL']
@@ -42,14 +38,14 @@ Write-Host "Vault @ $($vault.Addr)"
 Write-Host "Project: $($project.Name)"
 Write-Host "[i] $staging : secret/$secret"
 Write-Host "    source: $($envLoader.LoadedFile)"
-Write-Host "    added=$($diff.Added) changed=$($diff.Changed) unchanged=$($diff.Unchanged) removed=$($diff.Removed)"
-if (Test-Path $settingsPath) {
-    Write-Host '[i] config : secret/config'
-    Write-Host "    source: $settingsPath"
-    Write-Host "    keys=$($settingsData.Count) added=$($settingsDiff.Added) changed=$($settingsDiff.Changed) unchanged=$($settingsDiff.Unchanged) removed=$($settingsDiff.Removed)"
+Write-Host "    added=$($diffSecret.Added) changed=$($diffSecret.Changed) unchanged=$($diffSecret.Unchanged) removed=$($diffSecret.Removed)"
+if ($config.Loaded) {
+    Write-Host "[i] config : secret/$configSecret"
+    Write-Host '    source: settings.cfg'
+    Write-Host "    keys=$($config.Data.Count) added=$($diffConfig.Added) changed=$($diffConfig.Changed) unchanged=$($diffConfig.Unchanged) removed=$($diffConfig.Removed)"
 }
 else {
-    Write-Host '[i] config : skipped (no settings.cfg)'
+    Write-Host "[i] config : skipped (no settings.cfg)"
 }
 Write-Host "[i] CI → $ciLabel"
 foreach ($key in $ciVars.Keys) {
@@ -64,9 +60,9 @@ if ((Read-Host 'Apply? [y/N]') -notmatch '^[yY]$') {
 $vault.WriteSecret($secret, $data)
 Write-Host "[+] secret/$secret updated"
 
-if ($settingsData.Count -gt 0) {
-    $vault.WriteSecret('config', $settingsData)
-    Write-Host "[+] secret/config updated ($($settingsData.Count) keys)"
+if ($config.Loaded) {
+    $vault.WriteSecret($configSecret, $config.Data)
+    Write-Host "[+] secret/$configSecret updated ($($config.Data.Count) keys)"
 }
 
 $ci = [SourceControl]::new($remoteUrl)

@@ -1,13 +1,22 @@
 class Config {
     hidden [string]$File
-    hidden [hashtable]$Tree
+    [hashtable]$Tree
+    [hashtable]$Data
     [string]$Name
+    [bool]$Loaded
 
     Config([string]$FileName) {
         if ([string]::IsNullOrWhiteSpace($FileName)) { throw '[!] config file name required' }
-        if (-not (Test-Path $FileName)) { throw "[!] missing $FileName" }
+        $this.File = $FileName
+        $this.Data = @{}
+        $this.Tree = @{}
+        if (-not (Test-Path $FileName)) { return }
         $this.File = (Resolve-Path $FileName).Path
         $this.Tree = $this.ReadYaml()
+        $this.Loaded = $true
+        if ((Split-Path $FileName -Leaf) -eq 'settings.cfg') {
+            $this.Data = $this.FlattenNode($this.Tree, '')
+        }
         $projectName = [string]$this.Get('project')
         if (-not [string]::IsNullOrWhiteSpace($projectName)) { $this.Name = $projectName }
     }
@@ -31,10 +40,6 @@ class Config {
             throw "[!] $Path not set in $($this.File)"
         }
         return [string]$val
-    }
-
-    [hashtable] VaultFlat() {
-        return $this.FlattenNode($this.Tree, '')
     }
 
     hidden [hashtable] FlattenNode([object]$Node, [string]$Prefix) {
