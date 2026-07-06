@@ -23,7 +23,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 gitleaks
 
   unit-test:
@@ -34,7 +34,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 unit-test
 
   semgrep:
@@ -45,7 +45,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 semgrep
 
   sonar:
@@ -56,7 +56,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 sonar
 
   build:
@@ -67,7 +67,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 build
       - uses: actions/upload-artifact@v4
         with:
@@ -83,7 +83,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: build-artifact
@@ -110,7 +110,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: syft-sbom
@@ -125,7 +125,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: build-artifact
@@ -147,7 +147,7 @@ jobs:
       cancel-in-progress: false
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: build-artifact
