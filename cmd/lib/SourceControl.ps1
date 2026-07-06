@@ -89,7 +89,13 @@ class SourceControl {
         if ($LASTEXITCODE -eq 1) {
             Write-Host "[i] unrelated histories — merging $target into $BranchName"
             & git -C $repo merge $target --allow-unrelated-histories -m "Merge $TargetBranch into $BranchName" 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "[!] git merge failed: $target into $BranchName" }
+            if ($LASTEXITCODE -ne 0) {
+                & git -C $repo merge --abort 2>$null | Out-Null
+                if ($previous) {
+                    & git -C $repo checkout $previous 2>&1 | Out-Null
+                }
+                throw "[!] git merge failed: $target into $BranchName"
+            }
         }
         elseif ($LASTEXITCODE -ne 0) {
             throw "[!] git merge-base failed: HEAD $target"
