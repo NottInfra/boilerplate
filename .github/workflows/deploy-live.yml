@@ -7,6 +7,9 @@ on:
   schedule:
     - cron: '0 0 * * *'
 
+permissions:
+  contents: read
+
 env:
   SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
   RELEASE_PIPELINE: ${{ github.ref == 'refs/heads/main' && 'production' || 'gated' }}
