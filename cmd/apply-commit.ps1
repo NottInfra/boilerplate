@@ -45,6 +45,7 @@ if ((Read-Host 'Create pull request? [y/N]') -match '^[yY]$') {
     if ([string]::IsNullOrWhiteSpace($slug)) { throw '[!] Commit message cannot produce a valid branch name' }
     $git = [SourceControl]::new($targetUrl)
     $branch = $git.CreateBranch("pull-request/$slug", $targetRemote)
+    $git.PreparePullRequestBranch($branch, $targetRemote, $targetBranch)
     $git.PushBranch($targetRemote, $branch)
     $prUrl = $git.CreatePullRequest($branch, $targetBranch, $msg)
     Write-Host "[+] PR $branch → $targetBranch ($prUrl)"
