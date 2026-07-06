@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Env.ps1"
-. "$PSScriptRoot/lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/lib/Config.ps1"
 . "$PSScriptRoot/lib/Elastic.ps1"
 . "$PSScriptRoot/lib/Kibana.ps1"
 . "$PSScriptRoot/lib/Grafana.ps1"
@@ -21,7 +21,7 @@ foreach ($d in $dirs) {
 }
 if (-not $hasAny) { throw '[!] No dashboards found under dashboards/{grafana,kibana,posthog}/' }
 
-$project = [ProjectConfigParse]::new()
+$project = [Config]::new('project.cfg')
 
 Write-Host "[+] Applying dashboards (ENV=$($env:ENV), project=$($project.Name))"
 

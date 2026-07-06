@@ -2,12 +2,12 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Env.ps1"
-. "$PSScriptRoot/lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/lib/Config.ps1"
 . "$PSScriptRoot/lib/Spaceship.ps1"
 
 [void][Env]::new()
 
-$project = [ProjectConfigParse]::new()
+$project = [Config]::new('project.cfg')
 $registry = $project.Require('public.dns.registry')
 $domain = $project.Require('public.domain')
 $pubHost = $project.Require('public.host')

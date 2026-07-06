@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Env.ps1"
-. "$PSScriptRoot/lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/lib/Config.ps1"
 . "$PSScriptRoot/lib/GitHub.ps1"
 . "$PSScriptRoot/lib/GitLab.ps1"
 . "$PSScriptRoot/lib/SourceControl.ps1"
@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 if (-not (Test-Path 'Caddyfile')) { throw '[!] Missing Caddyfile' }
 
-$project = [ProjectConfigParse]::new()
+$project = [Config]::new('project.cfg')
 
 $git = [SourceControl]::new($project.Require('remotes.iac.url'))
 try {

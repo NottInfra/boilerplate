@@ -1,14 +1,15 @@
-class ProjectConfigParse {
+class Config {
     hidden [string]$File
     hidden [hashtable]$Tree
     [string]$Name
 
-    ProjectConfigParse() {
-        if (-not (Test-Path 'project.cfg')) { throw '[!] missing project.cfg' }
-        $this.File = (Resolve-Path 'project.cfg').Path
+    Config([string]$FileName) {
+        if ([string]::IsNullOrWhiteSpace($FileName)) { throw '[!] config file name required' }
+        if (-not (Test-Path $FileName)) { throw "[!] missing $FileName" }
+        $this.File = (Resolve-Path $FileName).Path
         $this.Tree = $this.ReadYaml()
-        $this.Name = [string]$this.Get('project')
-        if ([string]::IsNullOrWhiteSpace($this.Name)) { throw '[!] project name required in project.cfg' }
+        $projectName = [string]$this.Get('project')
+        if (-not [string]::IsNullOrWhiteSpace($projectName)) { $this.Name = $projectName }
     }
 
     [object] Get([string]$Path) {
@@ -30,6 +31,43 @@ class ProjectConfigParse {
             throw "[!] $Path not set in $($this.File)"
         }
         return [string]$val
+    }
+
+    [hashtable] VaultFlat() {
+        return $this.FlattenNode($this.Tree, '')
+    }
+
+    hidden [hashtable] FlattenNode([object]$Node, [string]$Prefix) {
+        $out = @{}
+        if (-not ($Node -is [System.Collections.IDictionary])) { return $out }
+
+        foreach ($key in $Node.Keys) {
+            $segment = [string]$key
+            $path = if ($Prefix) { "$Prefix.$segment" } else { $segment }
+            $child = $Node[$key]
+
+            if ($child -is [System.Collections.IDictionary]) {
+                foreach ($entry in $this.FlattenNode($child, $path).GetEnumerator()) {
+                    $out[$entry.Key] = $entry.Value
+                }
+                continue
+            }
+
+            if ($child -is [System.Collections.Generic.List[object]]) {
+                foreach ($item in $child) {
+                    $line = [string]$item
+                    if ($line -notmatch '^([^=]+)=(.*)$') {
+                        throw "[!] invalid settings entry at ${path}: $line"
+                    }
+                    $out["$path.$($Matches[1])"] = $this.Unquote($Matches[2].Trim())
+                }
+                continue
+            }
+
+            $out[$path] = [string]$child
+        }
+
+        return $out
     }
 
     hidden [hashtable] ReadYaml() {
@@ -65,7 +103,12 @@ class ProjectConfigParse {
 
             if ($value -eq '') {
                 $next = $this.NextContentLine($lines, $i)
-                if ($next -match ('^' + (' ' * $indent) + '-\s+')) {
+                $isList = $false
+                if ($next -match '^(\s*)-\s+') {
+                    $listIndent = $Matches[1].Length
+                    if ($listIndent -eq $indent -or $listIndent -gt $indent) { $isList = $true }
+                }
+                if ($isList) {
                     $frame.Map[$key] = [System.Collections.Generic.List[object]]::new()
                     continue
                 }

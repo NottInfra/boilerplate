@@ -2,14 +2,14 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Env.ps1"
-. "$PSScriptRoot/lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/lib/Config.ps1"
 . "$PSScriptRoot/lib/GitHub.ps1"
 . "$PSScriptRoot/lib/GitLab.ps1"
 . "$PSScriptRoot/lib/SourceControl.ps1"
 
 [void][Env]::new()
 
-$project = [ProjectConfigParse]::new()
+$project = [Config]::new('project.cfg')
 
 $pubDomain = [string]$project.Get('public.domain')
 $rows = [System.Collections.Generic.List[object]]::new()

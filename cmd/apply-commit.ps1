@@ -2,14 +2,14 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Env.ps1"
-. "$PSScriptRoot/lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/lib/Config.ps1"
 . "$PSScriptRoot/lib/Gitleaks.ps1"
 . "$PSScriptRoot/lib/GitHub.ps1"
 . "$PSScriptRoot/lib/GitLab.ps1"
 . "$PSScriptRoot/lib/SourceControl.ps1"
 
 [void][Env]::new()
-$project = [ProjectConfigParse]::new()
+$project = [Config]::new('project.cfg')
 
 $channel = switch ($env:ENV.ToLower()) {
     'live' { 'live' }
