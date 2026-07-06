@@ -23,7 +23,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 gitleaks
 
   unit-test:
@@ -34,7 +34,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 unit-test
 
   semgrep:
@@ -45,7 +45,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 semgrep
 
   sonar:
@@ -56,7 +56,7 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 sonar
 
   build:
@@ -67,9 +67,9 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: build-artifact
           path: ${{ env.ARTIFACT_DIR }}/build-artifact.json
@@ -83,8 +83,8 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: build-artifact
           path: ${{ env.ARTIFACT_DIR }}
@@ -95,7 +95,7 @@ jobs:
           "RELEASE_IMAGE=$($artifact.image)" >> $env:GITHUB_ENV
           docker pull $artifact.image
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 syft
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: syft-sbom
@@ -110,8 +110,8 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: syft-sbom
           path: ${{ env.ARTIFACT_DIR }}
@@ -125,8 +125,8 @@ jobs:
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: build-artifact
           path: ${{ env.ARTIFACT_DIR }}
@@ -147,8 +147,8 @@ jobs:
       cancel-in-progress: false
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: build-artifact
           path: ${{ env.ARTIFACT_DIR }}
