@@ -75,6 +75,28 @@ class SourceControl {
         return $this.Backend.CreateBranch($Name, $RemoteName)
     }
 
+    [void] PreparePullRequestBranch([string]$BranchName, [string]$RemoteName, [string]$TargetBranch) {
+        $repo = $this.Backend.LocalPath
+        & git -C $repo fetch $RemoteName $TargetBranch 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "[!] git fetch failed: $RemoteName $TargetBranch" }
+
+        $previous = (& git -C $repo branch --show-current 2>$null).Trim()
+        & git -C $repo checkout $BranchName 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "[!] git checkout failed: $BranchName" }
+
+        $target = "$RemoteName/$TargetBranch"
+        & git -C $repo merge-base HEAD $target 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[i] unrelated histories — merging $target into $BranchName"
+            & git -C $repo merge $target --allow-unrelated-histories -m "Merge $TargetBranch into $BranchName" 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "[!] git merge failed: $target into $BranchName" }
+        }
+
+        if ($previous) {
+            & git -C $repo checkout $previous 2>&1 | Out-Null
+        }
+    }
+
     [void] PushBranch([string]$RemoteName, [string]$BranchName) {
         $this.Backend.PushBranch($RemoteName, $BranchName)
     }

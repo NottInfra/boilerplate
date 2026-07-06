@@ -2,13 +2,25 @@ class GitHub {
     [string]$Remote
     [string]$LocalPath
     [string]$Repo
-    [bool]$HasGh
+    hidden [string]$Gh
 
     GitHub([string]$Remote, [string]$LocalPath) {
         $this.Remote = $Remote
         $this.LocalPath = $LocalPath
-        $this.HasGh = [bool](Get-Command gh -ErrorAction SilentlyContinue)
-        if (-not $this.HasGh) { throw '[!] gh CLI required' }
+        $this.Gh = [GitHub]::ResolveGh()
+    }
+
+    static [string] ResolveGh() {
+        $cmd = Get-Command gh -ErrorAction SilentlyContinue
+        if ($cmd) { return $cmd.Source }
+        $paths = [System.Collections.Generic.List[string]]::new()
+        if ($env:HOMEBREW_PREFIX) { $paths.Add((Join-Path $env:HOMEBREW_PREFIX 'bin/gh')) }
+        $paths.Add('/opt/homebrew/bin/gh')
+        $paths.Add('/usr/local/bin/gh')
+        foreach ($p in $paths) {
+            if (Test-Path $p) { return $p }
+        }
+        throw '[!] gh CLI required (install: brew install gh)'
     }
 
     [void] Sync() {
@@ -90,25 +102,25 @@ class GitHub {
 
     [void] CreateRepo([string]$Owner, [string]$Name, [bool]$Private = $true) {
         $vis = if ($Private) { '--private' } else { '--public' }
-        & gh repo create "$Owner/$Name" $vis --confirm 2>&1 | Out-Null
+        & $this.Gh repo create "$Owner/$Name" $vis --confirm 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "[!] gh repo create failed: $Owner/$Name" }
         Write-Host "[+] GitHub repo created: $Owner/$Name"
     }
 
     [void] SetSecret([string]$Repo, [string]$Name, [string]$Value) {
-        $Value | & gh secret set $Name --body - -R $Repo 2>&1 | Out-Null
+        $Value | & $this.Gh secret set $Name --body - -R $Repo 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "[!] gh secret set failed: $Name" }
         Write-Host "[+] GitHub ${Repo}: secret $Name"
     }
 
     [void] SetVariable([string]$Repo, [string]$Name, [string]$Value) {
-        $Value | & gh variable set $Name --body - -R $Repo 2>&1 | Out-Null
+        $Value | & $this.Gh variable set $Name --body - -R $Repo 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "[!] gh variable set failed: $Name" }
         Write-Host "[+] GitHub ${Repo}: variable $Name"
     }
 
     [string] CreatePullRequest([string]$SourceBranch, [string]$TargetBranch, [string]$Title) {
-        $out = & gh pr create --repo $this.Repo --base $TargetBranch --head $SourceBranch --title $Title --body $Title 2>&1
+        $out = & $this.Gh pr create --repo $this.Repo --base $TargetBranch --head $SourceBranch --title $Title --body $Title 2>&1
         if ($LASTEXITCODE -ne 0) { throw "[!] gh pr create failed: $out" }
         $url = ($out | Select-Object -Last 1).ToString().Trim()
         Write-Host "[+] GitHub PR created: $url"
