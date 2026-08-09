@@ -17,6 +17,7 @@ Service hosts live in [`settings.cfg`](../../settings.cfg) under `ENDPOINTS.<SER
 | `apply-commit.ps1` | Commit + push to live/test remotes |
 | `apply-dns.ps1` | Apply `public.dns.*` A (+ per-site TXT) via Spaceship |
 | `apply-google-observability.ps1` | GA4 account/properties + Search Console DNS verify |
+| `apply-synth-monitoring.ps1` | Push HTTPS probe targets → `NottInfra/blackbox-targets` (`https/<project>.json`) |
 | `refresh-boilerplate.ps1` | Soft-pull boilerplate updates |
 
 Orchestrators construct `$Env` / `$Project` / `$Settings`, then `$Env.BindConfig($Settings, $Project)` so endpoint URLs are in process env. Libs keep using `$Env.Require('…_URL')`.
