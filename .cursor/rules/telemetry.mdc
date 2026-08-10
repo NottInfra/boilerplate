@@ -1,0 +1,10 @@
+---
+globs: src/**/*
+alwaysApply: false
+---
+
+If `src/utils/telemetry` does not exist, create it with files: `index`, `logging`, `tracing`, `metrics`.
+
+All OTEL-compatible. Read the collector address from env `OTEL_URL` (from `settings.cfg` `ENDPOINTS.OTEL` via `apply-env` / `NETWORK`: cluster or public).
+
+Instantiate telemetry in the composition root and inject it throughout the application.

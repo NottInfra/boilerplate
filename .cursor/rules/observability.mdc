@@ -1,0 +1,51 @@
+---
+globs: src/**/*
+alwaysApply: false
+---
+
+After changes have been applied and before finalising, review whether any aspects need logging, traces, or metrics injected from the composition root using modules from `src/utils/telemetry` (collector address: `OTEL_URL`).
+
+Telemetry requirements mean the signal should be observable in a dashboard or received in an alert.
+
+Then update documentation in `docs/alerts`, `docs/dashboards`, and `docs/telemetry`, and update the dashboards and alerts in `/dashboards` and `/alerts`:
+
+1. `/dashboards/grafana/overview.json`
+Technical health of the application (RED + app health):
+- Request rate
+- Error rate
+- Latency
+- Availability
+- DB/dependency performance
+- Queue/job performance
+- Resource usage relevant to the app
+
+2. `/dashboards/grafana/business-analytics.json`
+Domain/business metrics, separate from health:
+- Users / active users
+- Signups
+- Conversions
+- Orders
+- Revenue
+- Feature usage
+- Retention
+- Funnel progression
+- Events
+- Growth
+
+3. `/dashboards/opensearch/logging.ndjson`
+OpenSearch investigation / drill-down:
+- Exceptions
+- Application logs
+- Error patterns
+- Request traces/context
+- Audit events
+- Search/filter by user, request ID, endpoint, etc.
+
+4. `/dashboards/opensearch/security.ndjson`
+Only if the application needs it:
+- Login failures
+- Permission denials
+- Account changes
+- Sensitive actions
+- Suspicious activity
+- Audit trail
