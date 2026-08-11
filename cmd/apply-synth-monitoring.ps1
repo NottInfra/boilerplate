@@ -59,14 +59,9 @@ try {
     if ($rows.Count -eq 0) { throw '[!] no blackbox HTTPS targets derived from public.domains / public.dns.A' }
 
     $payload = @($rows.ToArray())
-    # Always emit a JSON array (single-target projects must not collapse to an object).
-    try {
-        $json = ConvertTo-Json -InputObject $payload -Depth 10 -AsArray
-    }
-    catch {
-        $json = ConvertTo-Json -InputObject $payload -Depth 10
-        if ($payload.Count -eq 1 -and $json -notmatch '^\s*\[') { $json = "[`n$json`n]" }
-    }
+    # file_sd expects [{targets,labels}, ...] — do not use -AsArray (double-wraps arrays → [[...]]).
+    $json = ConvertTo-Json -InputObject $payload -Depth 10
+    if ($payload.Count -eq 1 -and $json -notmatch '^\s*\[') { $json = "[`n$json`n]" }
 
     $root = $Project.Require('remotes.configs.root').TrimEnd('/', '.git')
     $remoteUrl = "$root/blackbox-targets.git"
