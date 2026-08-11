@@ -1,0 +1,238 @@
+---
+description: @sessionsprovider/sdk — usage and full interface (Telegram TDLib sessions)
+alwaysApply: false
+---
+
+# @sessionsprovider/sdk
+
+TypeScript client for sessionsprovider over WebSocket.
+
+## Install
+
+```bash
+npm install @sessionsprovider/sdk \
+  --registry https://pkgs.nottinfra.co.uk/repository/npm-hosted/
+```
+
+`.npmrc`:
+
+```ini
+@sessionsprovider:registry=https://pkgs.nottinfra.co.uk/repository/npm-hosted/
+//pkgs.nottinfra.co.uk/repository/npm-hosted/:always-auth=true
+//pkgs.nottinfra.co.uk/repository/npm-hosted/:_auth=<base64 user:password>
+```
+
+## URLs
+
+- WebSocket: `wss://telegramsessions.xyz`
+- Auth pages: `https://auth.telegramsessions.xyz`
+
+## Create client
+
+```typescript
+import { createSessionProvider } from "@sessionsprovider/sdk";
+
+const provider = createSessionProvider({
+  userId: "your-svc-id",       // developer_svc.id
+  apiKey: "your-api-key",
+  url: "wss://telegramsessions.xyz",
+  pool: false                  // default for onboardAccount
+});
+```
+
+`userId` + `apiKey` identify the **developer**. Register service names with `createService` before linking sessions to them.
+
+---
+
+## SessionProvider
+
+### `createService(name)`
+
+```typescript
+const { service, svcName, developerName, existing, accounts } =
+  await provider.createService("my-app");
+// empty name → throws service_name_required
+```
+
+### `getService(name)`
+
+```typescript
+const view = await provider.getService("my-app");
+// { svcName, accounts: Account[] }
+// not registered → throws service_not_registered
+```
+
+### `createSession({ svcName, username?, accountId?, sessionName? })`
+
+```typescript
+const session = await provider.createSession({
+  svcName: "my-app",
+  accountId: "6412617720"
+});
+// Session with files, or AccessPending { pending: true, requestId }
+```
+
+### `onboardAccount(prompter, options?)`
+
+```typescript
+const { accountId, sessionId } = await provider.onboardAccount(prompter, {
+  phone?: string,
+  pool?: boolean,
+  forceReauth?: boolean
+});
+```
+
+`prompter`: `{ ask(question: string): Promise<string>; tell?(message: string): void }` — used for phone / login code / 2FA.
+
+### `listServices()` / `stats()` / `close()`
+
+```typescript
+await provider.listServices(); // string[]
+await provider.stats();        // provider inventory
+await provider.close();        // always on shutdown
+```
+
+---
+
+## Service
+
+From `createService().service`. All calls scope to that `svcName`.
+
+### `lookup(query)`
+
+`query`: `@username` | phone | telegram id (`string` | `number`).
+
+```typescript
+const account = await service.lookup("@someuser");
+// AccountHandle — missing account → empty fields (id "", sessions [])
+```
+
+### `getAccount(accountId)`
+
+```typescript
+const account = await service.getAccount("6412617720");
+// AccountHandle — missing → empty fields
+```
+
+### `getPool(name)` / `createPool(name)`
+
+```typescript
+const pool = await service.getPool("production"); // PoolHandle
+// pool.accounts updates live on server `pool.updated` pushes
+```
+
+### `watchPool(name, onUpdate)`
+
+```typescript
+const unsub = service.watchPool("production", (view) => { /* PoolView */ });
+unsub();
+```
+
+---
+
+## AccountHandle
+
+From `lookup`, `getAccount`, or `pool.addAccount()`.
+
+Fields: `id`, `telegramId`, `phone`, `username`, `firstName`, `lastName`, `bio`, `managedSessionCount`, `activeTelegramSessionCount`, `poolEnabled`, `sessions`.
+
+### `getSession(sessionName)`
+
+```typescript
+const result = await account.getSession("worker-1");
+// Session:
+// {
+//   id, accountId, svcName, name,
+//   sessionPath: "data/sessions/{accountId}",
+//   sessionDirs: { databaseDirectory, filesDirectory },
+//   files?: { "tdlib-db/db.sqlite": "<base64>", "tdlib-db/td.binlog": "<base64>", ... }
+// }
+// or AccessPending: { pending: true, requestId, ownerNotification? }
+```
+
+Sessions are **official TDLib** directory exports (base64 file map). Pass `files` / dirs into your TDLib client. Treat session material as secrets (do not log).
+
+### `listSessions()`
+
+```typescript
+account.listSessions(); // Session[] already on the handle
+```
+
+---
+
+## PoolHandle
+
+From `getPool` / `createPool`.
+
+### `addAccount()`
+
+```typescript
+const account = await pool.addAccount();
+// AccountHandle with a session named after the pool
+// no pool-eligible unused accounts → throws
+```
+
+### `accounts`
+
+```typescript
+pool.accounts; // AccountHandle[] — live-updating
+```
+
+---
+
+## Types (shapes)
+
+```typescript
+type Session = {
+  id: string;
+  accountId: string;
+  svcName: string;
+  name: string;
+  sessionPath: string;
+  sessionDirs: { databaseDirectory: string; filesDirectory: string };
+  files?: Record<string, string>; // path → base64
+};
+
+type AccessPending = {
+  pending: true;
+  requestId: string;
+  ownerNotification?: OwnerNotification;
+};
+
+type Account = {
+  id: string;
+  telegramId: number | null;
+  phone: string | null;
+  username: string;
+  firstName: string;
+  lastName: string;
+  bio: string;
+  managedSessionCount: number;
+  activeTelegramSessionCount: number | null;
+  poolEnabled: boolean;
+  sessions: Session[];
+};
+
+type PoolView = { name: string; accounts: Account[] };
+type ServiceView = { svcName: string; accounts: Account[] };
+```
+
+`OwnerNotification` variants: `request_phone` | `auth_code_url` | `auth_password_url` | `access_confirm_deny` (includes approve/deny callback payloads for the account owner).
+
+---
+
+## Access control
+
+- Requests are scoped to the developer from the API key.
+- First service on an account → auto-grant; same developer, other service name → auto-grant.
+- Different developer → owner Approve/Deny; `getSession` / `createSession` return `{ pending: true, requestId }`.
+- Always handle `AccessPending` / onboarding steps — do not assume files are returned immediately.
+
+---
+
+## Usage rules
+
+1. Prefer high-level SDK methods (`Service` / `AccountHandle` / `PoolHandle`); do not open raw WebSockets elsewhere.
+2. Inject `SessionProvider` or `Service` from the composition root.
+3. Close the provider on process shutdown.
+4. Never log `files`, session paths with secrets, or API keys.
