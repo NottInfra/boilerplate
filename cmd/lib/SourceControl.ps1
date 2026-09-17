@@ -94,8 +94,32 @@ class SourceControl {
         & git -C $RepoPath config gitsign.clientID $this.Env.Require('OIDC_CLIENT_ID')
         & git -C $RepoPath config gitsign.redirectURL $this.Settings.Require('SIGSTORE.OIDC_REDIRECT_URL')
         & git -C $RepoPath config gitsign.autoclose false
+
+        # Private Sigstore TUF — gitsign's embedded public root expired; use ENDPOINTS.TUF.
+        $tufMirror = $this.Settings.Endpoint('TUF').TrimEnd('/')
+        $homeDir = if (-not [string]::IsNullOrWhiteSpace($env:HOME)) { $env:HOME } else { $env:USERPROFILE }
+        if ([string]::IsNullOrWhiteSpace($homeDir)) { throw '[!] HOME/USERPROFILE required for gitsign TUF cache' }
+        $tufRootDir = Join-Path (Join-Path $homeDir '.sigstore') 'root'
+        $tufRoot = Join-Path $tufRootDir 'nottinfra-root.json'
+        if (-not (Test-Path -LiteralPath $tufRootDir)) {
+            New-Item -ItemType Directory -Path $tufRootDir -Force | Out-Null
+        }
+        try {
+            Invoke-WebRequest -Uri "$tufMirror/root.json" -OutFile $tufRoot -UseBasicParsing
+        }
+        catch {
+            throw "[!] failed to fetch TUF root from $tufMirror/root.json ($($_.Exception.Message))"
+        }
+        & gitsign initialize --mirror $tufMirror --root $tufRoot | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "[!] gitsign initialize failed for mirror $tufMirror"
+        }
+        $env:TUF_MIRROR = $tufMirror
+        $env:TUF_ROOT = $tufRoot
+        $env:TUF_ROOT_JSON = $tufRoot
+
         $env:GITSIGN_LOG = Join-Path ([IO.Path]::GetTempPath()) 'gitsign.log'
-        Write-Host "[+] gitsign configured (log=$env:GITSIGN_LOG)"
+        Write-Host "[+] gitsign configured (log=$env:GITSIGN_LOG tuf=$tufMirror)"
     }
 
     [string] PromptCommitMessage() {
