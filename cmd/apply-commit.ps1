@@ -45,14 +45,17 @@ try {
     $git = [SourceControl]::new($Env, $Settings, $targetUrl, [GitHub]::new(), [GitLab]::new($Env))
     $msg = $git.PromptCommitMessage()
     $git.Commit($msg)
+    # PR title / branch slug = conventional header only (type[(scope)][!]: description)
+    $prTitle = (($msg -replace "`r", '') -split "`n")[0].Trim()
+    if ([string]::IsNullOrWhiteSpace($prTitle)) { $prTitle = $msg.Trim() }
 
     if ((Read-Host 'Create pull request? [y/N]') -match '^[yY]$') {
-        $slug = $msg.Trim() -replace '\s+', '-' -replace '[~^:?*\[\\]', '' -replace '\.+', '.'
+        $slug = $prTitle -replace '\s+', '-' -replace '[~^:?*\[\\]', '' -replace '\.+', '.'
         if ([string]::IsNullOrWhiteSpace($slug)) { throw '[!] Commit message cannot produce a valid branch name' }
         $branch = $git.CreateBranch("pull-request/$slug", $targetRemote)
         $git.PreparePullRequestBranch($branch, $targetRemote, $targetBranch)
         $git.PushBranch($targetRemote, $branch)
-        $prUrl = $git.CreatePullRequest($branch, $targetBranch, $msg)
+        $prUrl = $git.CreatePullRequest($branch, $targetBranch, $prTitle)
         Write-Host "[+] PR $branch → $targetBranch ($prUrl)"
     }
     else {
