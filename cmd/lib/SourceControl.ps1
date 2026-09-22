@@ -100,23 +100,29 @@ class SourceControl {
         $homeDir = if (-not [string]::IsNullOrWhiteSpace($env:HOME)) { $env:HOME } else { $env:USERPROFILE }
         if ([string]::IsNullOrWhiteSpace($homeDir)) { throw '[!] HOME/USERPROFILE required for gitsign TUF cache' }
         $tufRootDir = Join-Path (Join-Path $homeDir '.sigstore') 'root'
-        $tufRoot = Join-Path $tufRootDir 'nottinfra-root.json'
+        # Keep the initial root as a file (gitsign initialize may create dirs named after --root basenames).
+        $tufRootFile = Join-Path $tufRootDir 'nottinfra-initial-root.json'
         if (-not (Test-Path -LiteralPath $tufRootDir)) {
             New-Item -ItemType Directory -Path $tufRootDir -Force | Out-Null
         }
+        if (Test-Path -LiteralPath $tufRootFile) {
+            if ((Get-Item -LiteralPath $tufRootFile).PSIsContainer) {
+                Remove-Item -LiteralPath $tufRootFile -Recurse -Force
+            }
+        }
         try {
-            Invoke-WebRequest -Uri "$tufMirror/root.json" -OutFile $tufRoot -UseBasicParsing
+            Invoke-WebRequest -Uri "$tufMirror/root.json" -OutFile $tufRootFile -UseBasicParsing
         }
         catch {
             throw "[!] failed to fetch TUF root from $tufMirror/root.json ($($_.Exception.Message))"
         }
-        & gitsign initialize --mirror $tufMirror --root $tufRoot | Out-Null
+        & gitsign initialize --mirror $tufMirror --root $tufRootFile | Out-Null
         if ($LASTEXITCODE -ne 0) {
             throw "[!] gitsign initialize failed for mirror $tufMirror"
         }
         $env:TUF_MIRROR = $tufMirror
-        $env:TUF_ROOT = $tufRoot
-        $env:TUF_ROOT_JSON = $tufRoot
+        $env:TUF_ROOT = $tufRootFile
+        $env:TUF_ROOT_JSON = $tufRootFile
 
         $env:GITSIGN_LOG = Join-Path ([IO.Path]::GetTempPath()) 'gitsign.log'
         Write-Host "[+] gitsign configured (log=$env:GITSIGN_LOG tuf=$tufMirror)"
