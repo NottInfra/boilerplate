@@ -257,7 +257,7 @@ class SourceControl {
         if ($this.Channel -eq 'live') {
             foreach ($key in $Vars.Keys) {
                 $val = [string]$Vars[$key]
-                if ($key -match 'TOKEN|SECRET') {
+                if ($key -match 'TOKEN|SECRET|^VAULT_') {
                     $this.Backend.SetSecret($this.Backend.Repo, $key, $val)
                 }
                 else {

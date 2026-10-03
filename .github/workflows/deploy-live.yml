@@ -12,6 +12,9 @@ permissions:
 
 env:
   SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  VAULT_URL: ${{ secrets.VAULT_URL }}
+  VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+  VAULT_SECRET_PREFIX: ${{ secrets.VAULT_SECRET_PREFIX }}
   RELEASE_PIPELINE: ${{ github.ref == 'refs/heads/main' && 'production' || 'gated' }}
   ARTIFACT_DIR: artifacts
 
@@ -19,57 +22,57 @@ jobs:
   gitleaks:
     runs-on: self-hosted
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      group: ci-${{ github.workflow }}-${{ github.ref }}-gitleaks
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 gitleaks
 
   unit-test:
     needs: gitleaks
     runs-on: self-hosted
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      group: ci-${{ github.workflow }}-${{ github.ref }}-unit-test
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 unit-test
 
   semgrep:
     needs: unit-test
     runs-on: self-hosted
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      group: ci-${{ github.workflow }}-${{ github.ref }}-semgrep
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 semgrep
 
   sonar:
     needs: unit-test
     runs-on: self-hosted
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      group: ci-${{ github.workflow }}-${{ github.ref }}-sonar
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 sonar
 
   build:
     needs: [semgrep, sonar]
     runs-on: self-hosted
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      group: ci-${{ github.workflow }}-${{ github.ref }}-build
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 build
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: build-artifact
           path: ${{ env.ARTIFACT_DIR }}/build-artifact.json
@@ -79,12 +82,12 @@ jobs:
     needs: build
     runs-on: self-hosted
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      group: ci-${{ github.workflow }}-${{ github.ref }}-syft
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifact
           path: ${{ env.ARTIFACT_DIR }}
@@ -95,7 +98,7 @@ jobs:
           "RELEASE_IMAGE=$($artifact.image)" >> $env:GITHUB_ENV
           docker pull $artifact.image
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 syft
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: syft-sbom
@@ -106,12 +109,12 @@ jobs:
     needs: syft
     runs-on: self-hosted
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      group: ci-${{ github.workflow }}-${{ github.ref }}-grype
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: syft-sbom
           path: ${{ env.ARTIFACT_DIR }}
@@ -121,12 +124,12 @@ jobs:
     needs: build
     runs-on: self-hosted
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.job }}
+      group: ci-${{ github.workflow }}-${{ github.ref }}-trivy
       cancel-in-progress: true
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifact
           path: ${{ env.ARTIFACT_DIR }}
@@ -147,8 +150,8 @@ jobs:
       cancel-in-progress: false
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: build-artifact
           path: ${{ env.ARTIFACT_DIR }}

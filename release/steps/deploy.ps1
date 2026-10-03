@@ -3,14 +3,14 @@ $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/../lib/ProjectConfigParse.ps1"
 . "$PSScriptRoot/../lib/Registry.ps1"
-. "$PSScriptRoot/../lib/Elastic.ps1"
+. "$PSScriptRoot/../lib/OpenSearch.ps1"
 
 $staging = $args[0]
 if (-not $staging) { throw '[!] staging required: live|test' }
 
 $project = [ProjectConfigParse]::new($staging)
-$elastic = [Elastic]::new($project.Name, $staging)
-$elastic.Step('deploy', 'started')
+$os = [OpenSearch]::new($project.Name, $staging)
+$os.Step('deploy', 'started')
 
 try {
     $sourceImage = $project.ReleaseImage()
@@ -21,9 +21,9 @@ try {
     }
 
     [Registry]::new($project.Root, $project.Image).Push()
-    $elastic.Step('deploy', 'succeeded')
+    $os.Step('deploy', 'succeeded')
 }
 catch {
-    $elastic.Step('deploy', 'failed', @{ error = $_.Exception.Message })
+    $os.Step('deploy', 'failed', @{ error = $_.Exception.Message })
     throw
 }

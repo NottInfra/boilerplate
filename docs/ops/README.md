@@ -24,14 +24,14 @@ Orchestrators construct `$Env` / `$Project` / `$Settings`, then `$Env.BindConfig
 
 ## Release pipeline (`/release`)
 
-`build` → `unit-test` → `gitleaks` → `semgrep` → `syft` → `grype` → `trivy` → `sonar` → `push` (live only). Deploy is Watchtower on the IaC host via `compose.yml`.
+`build` → `unit-test` → `gitleaks` → `semgrep` → `syft` → `grype` → `trivy` → `sonar` → `push` (live only). Deploy retags and pushes the release image.
 
-Finding-producing steps import reports to Defect Dojo and emit summaries to Elasticsearch (`{project}-findings`).
+Finding-producing steps import reports to Defect Dojo and emit summaries to OpenSearch (`{project}-findings`).
 
 | Lib | Purpose |
 |-----|---------|
 | `Project.ps1` | `project.yml` parser, `Get('remotes.live')`, pipeline context |
-| `Elastic.ps1` | Pipeline step + finding telemetry |
+| `OpenSearch.ps1` | Pipeline step + finding telemetry |
 | `DefectDojo.ps1` | Scan import (CI) |
 | `Registry.ps1` | Docker build / tag / push |
 | `Gitleaks.ps1` | Secrets scan |

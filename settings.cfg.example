@@ -1,4 +1,4 @@
-# Copy to settings.cfg (gitignored; must be TUF-signed as settings.cfg.sig).
+# Signed config. settings.cfg.sig must match this file (TUF CMS).
 # Non-secret config only — secrets live in .env* / Vault.
 # NETWORK=cluster|public selects ENDPOINTS.<SERVICE>.CLUSTER|PUBLIC → env as <SERVICE>_URL.
 
@@ -9,6 +9,9 @@ GOOGLE:
   OAUTH_REDIRECT_URL:
 
 ENDPOINTS:
+  ALERTMANAGER:
+    CLUSTER:
+    PUBLIC:
   CTLOG:
     CLUSTER:
     PUBLIC:

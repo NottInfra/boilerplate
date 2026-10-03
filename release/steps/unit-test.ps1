@@ -2,24 +2,25 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/../lib/ProjectConfigParse.ps1"
-. "$PSScriptRoot/../lib/Elastic.ps1"
+. "$PSScriptRoot/../lib/OpenSearch.ps1"
 
 $staging = $args[0]
 if (-not $staging) { throw '[!] staging required: live|test' }
 
 $project = [ProjectConfigParse]::new($staging)
-$elastic = [Elastic]::new($project.Name, $staging)
-$elastic.Step('unit-test', 'started')
+$os = [OpenSearch]::new($project.Name, $staging)
+$os.Step('unit-test', 'started')
 
 try {
-    if (-not (Get-Command go -ErrorAction SilentlyContinue) -or -not (Get-Command make -ErrorAction SilentlyContinue)) {
-        throw '[!] go and make are required for unit tests'
+    if (-not (Get-Command make -ErrorAction SilentlyContinue)) {
+        throw '[!] make is required for unit tests'
     }
-    & make test
-    if ($LASTEXITCODE -ne 0) { throw '[!] make test failed' }
-    $elastic.Step('unit-test', 'succeeded')
+    Write-Host '[+] unit-test via make test-docker'
+    & make test-docker
+    if ($LASTEXITCODE -ne 0) { throw '[!] unit tests failed' }
+    $os.Step('unit-test', 'succeeded')
 }
 catch {
-    $elastic.Step('unit-test', 'failed', @{ error = $_.Exception.Message })
+    $os.Step('unit-test', 'failed', @{ error = $_.Exception.Message })
     throw
 }

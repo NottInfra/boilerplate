@@ -92,7 +92,7 @@ class ProjectConfigParse {
 
             if ($value -eq '') {
                 $next = $this.NextContentLine($lines, $i)
-                if ($next -match ('^' + (' ' * $indent) + '-\s+')) {
+                if ($next -match '^(\s*)-\s+' -and $Matches[1].Length -gt $indent) {
                     $frame.Map[$key] = [System.Collections.Generic.List[object]]::new()
                     continue
                 }
