@@ -32,17 +32,24 @@ class OpenSearchDashboards {
     }
 
     hidden [hashtable] Headers() {
-        return @{
+        $headers = @{
             'osd-xsrf' = 'true'
             'kbn-xsrf' = 'true'
         }
+        $user = $this.Env.Get('OPENSEARCH_USER')
+        $pass = $this.Env.Get('OPENSEARCH_PASSWORD')
+        if (-not [string]::IsNullOrWhiteSpace($user) -and -not [string]::IsNullOrWhiteSpace($pass)) {
+            $token = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${user}:${pass}"))
+            $headers.Authorization = "Basic $token"
+        }
+        return $headers
     }
 
     [void] ImportNdjson([string]$File, [string]$Slug) {
         Write-Host "== OpenSearch Dashboards import: $($this.Url) =="
         Write-Host "    $($this.Project.Name) / $Slug ← $File"
         $body = $this.PrepareNdjson($File, $Slug)
-        $tmp = [IO.Path]::GetTempFileName()
+        $tmp = [IO.Path]::GetTempFileName() + '.ndjson'
         try {
             Set-Content -Path $tmp -Value $body -NoNewline
             $form = @{ file = Get-Item $tmp }
@@ -71,10 +78,10 @@ class OpenSearchDashboards {
 }
 
 # SIG # Begin signature block
-# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDZP7mRne3r2F5x
-# DIdqV3JpD+AKQ71XOIKVcRSNWu99I6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBrAcjwr8hz47RZ
+# KPpYND5HkXsBBew8PimU1CxSwqfuFaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -92,21 +99,20 @@ class OpenSearchDashboards {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIOKKLW4d
-# Cd1WmVQhBslSRc6284+nkv6zTJk7AnruZh8QMAsGCSqGSIb3DQEBAQSCAgA2gn71
-# 109c2kWXXaA7QjyJJCqBMpxi64CNwyTE6dAgKb35XJIT/rj+rrdLkt9LEROuzAiE
-# nX0cVUN4ut4DVwSbpDu7qScD3wmekQhosG3iwgHD+tlUE9so8sjZiVaLfvKSFxwv
-# Znle/OcUJ3pBApdM8OElb0jypUIIHN6tX1ES2D4OLVBlml+tPzGTbLNCrjOvciPV
-# JSgNTZeqji6ckl79qAbb1QcOL3sKkQFRE1//GBFKbfIpAy6pfh2eRvJrtds6yX0y
-# U+9lQFl2DmYVF302ASPkn2+yXUQxfVw3bs27KdbLJZgAitfG9X3r/774xyj/tmlS
-# bELE65fOvUXFe4sMXlxoaISIZg8fQi0fMVm/LNUnkag7F91j/2ROcyL0WsfPWbQO
-# upvEybHwsyn49USYn59V5rSVClRHSCH3c3bPORNsurvyoiUInHA62XBbZEv/mHIe
-# poqamJamZY0PocdI7tprRU8AsQAnjgMEBZJN4DIxcGgnQIbQjZoNFAx42LWNQTlO
-# 7IgSfdShy1l8ibvsOwd9yZRiT9rHDzaskohBC1EXBV3Tew/jbklwMdv9xw4WFDKw
-# 9Hg5i3lp/B33ak033qq437iF5pw6A5o7bq+63d+dlRsM07wsBBzSPIWUFD23rVnT
-# GpNjLr6JavpTjA+c93OPP21RLXvMnSUTxCzxg6ErMCkGDCsGAQQBgoxMCgABAzEZ
-# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIJmBkeqB
+# VJWy7PIUAuYFSOskrQo88Glpz1MAFWh45B3vMAsGCSqGSIb3DQEBAQSCAgCiYCbp
+# a63OViM17WjIiYiGipJkWz6BvTH9ky2crHeyjFOAi1uaq76Ky/i3cKh0TdIFgGb0
+# bK7z6AtWTE52VrBfdk9wc/alWX+DeG+s7wKV+XwUhdbKBO2aIHXE/KvqYMCQp2hM
+# GV/ix6rJWExf1p4Zi02F8/jnSECltEGqeWAZ3Hy3p9svQV7fGoLlNa94sQ6IOhhj
+# hM3SFQUZHpkwHHi6+JDvm5ewD1uwqXkLuGwq3N5RzV01cY3vIMZW3hRzl3BEnAq8
+# a+jJefYeqkwDqbbw2rQnW1GnnXHFxX9o0kn7+2VZdrZMAJR6yPHAmwhfr4zyQGqM
+# xdRdHCPbRGhrz7sxBGd2rhrgjK6UZf/fYj0nGqft+gpvSbuX4rvss45K+kowY3R/
+# RVOZ+4DAaFQ9Xqw/sFsixPKM69wmzmLEPDVAuGctWSamqN1Ch3cZnBkQwWO9u9xJ
+# 8QCeck0I8uoeyTLRw9HwQDIfxCKEB+/Rz2pGg51g3qUMQgW/+qLcu20b/BZGT3Ut
+# 5jpI7qHjBv6g0P4Dnx4AJ5BnUCFNtp8NpVfu9tvLTZfcvzqdfKcHnfhrJ7fI4AdU
+# kwfaT6Yt+029DBcf7O6kG+skjXMURNne+rRSWIwfFGi7jXlNS0OmlmhOLzwUvxpJ
+# 5mcVn0q8iT5Oti7ELOxKJFK6kT3vtSILt+sPyw==
 # SIG # End signature block
