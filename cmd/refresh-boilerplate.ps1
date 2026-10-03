@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Config.ps1"
 
-$preserve = @('.git', 'src', '.env.development', '.env.test', '.env.live', 'project.cfg', 'settings.cfg', 'Caddyfile', 'compose.yml', 'assets/db.sql')
+$preserve = @('.git', 'src', '.env.development', '.env.test', '.env.live', 'project.cfg', 'settings.cfg', 'Caddyfile', 'assets/db.sql')
 
 $added = [System.Collections.Generic.List[string]]::new()
 $updated = [System.Collections.Generic.List[string]]::new()

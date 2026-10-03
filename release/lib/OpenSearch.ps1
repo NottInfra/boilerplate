@@ -1,4 +1,4 @@
-class Elastic {
+class OpenSearch {
     hidden [string]$Url
     hidden [string]$UserPass
     hidden [string]$Env
@@ -6,19 +6,29 @@ class Elastic {
     hidden [string]$Staging
     hidden [string]$ProjectName
 
-    Elastic([string]$ProjectName, [string]$Env) {
-        if (-not $env:ELASTIC_URL) { throw '[!] ELASTIC_URL is required' }
-        if (-not $env:ELASTIC_USER) { throw '[!] ELASTIC_USER is required' }
-        if (-not $env:ELASTIC_PASSWORD) { throw '[!] ELASTIC_PASSWORD is required' }
-        $this.Url = $env:ELASTIC_URL
+    OpenSearch([string]$ProjectName, [string]$Env) {
+        if (-not $env:OPENSEARCH_URL) { throw '[!] OPENSEARCH_URL is required' }
+        if (-not $env:OPENSEARCH_USER) { throw '[!] OPENSEARCH_USER is required' }
+        if (-not $env:OPENSEARCH_PASSWORD) { throw '[!] OPENSEARCH_PASSWORD is required' }
+        $this.Url = $env:OPENSEARCH_URL.TrimEnd('/')
+        try {
+            $null = [System.Net.Dns]::GetHostAddresses('opensearch.opensearch.svc.cluster.local')
+            $this.Url = 'http://opensearch.opensearch.svc.cluster.local:9200'
+        }
+        catch { }
         $this.Env = $Env
-        $this.UserPass = "$($env:ELASTIC_USER):$($env:ELASTIC_PASSWORD)"
+        $this.UserPass = "$($env:OPENSEARCH_USER):$($env:OPENSEARCH_PASSWORD)"
         $this.ProjectName = $ProjectName
         $this.Staging = $Env
         $this.Stream = "$ProjectName-pipeline"
     }
 
-    [void] Step([string]$Step, [string]$Status, [hashtable]$Extra = @{}) {
+    [void] Step([string]$Step, [string]$Status) {
+        $this.Step($Step, $Status, @{})
+    }
+
+    [void] Step([string]$Step, [string]$Status, [hashtable]$Extra) {
+        if (-not $Extra) { $Extra = @{} }
         $fields = [ordered]@{
             event                    = 'pipeline_step'
             'deployment.environment' = $this.Env
@@ -54,6 +64,7 @@ class Elastic {
         $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($this.UserPass))
         $headers['Authorization'] = "Basic $b64"
         $body = ($doc | ConvertTo-Json -Depth 20 -Compress)
-        Invoke-RestMethod -Method Post -Uri "$($this.Url)/$DataStream/_doc" -Headers $headers -Body $body | Out-Null
+        Invoke-RestMethod -Method Post -Uri "$($this.Url)/$DataStream/_doc" `
+            -Headers $headers -Body $body -SkipCertificateCheck -TimeoutSec 30 | Out-Null
     }
 }

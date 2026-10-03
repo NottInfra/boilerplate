@@ -15,7 +15,7 @@ class Vault {
     [hashtable] ReadSecret([string]$Path) {
         $uri = "$($this.Addr)/v1/secret/data/$Path"
         try {
-            $r = Invoke-RestMethod -Uri $uri -Headers @{ 'X-Vault-Token' = $this.Token }
+            $r = Invoke-RestMethod -Uri $uri -Headers @{ 'X-Vault-Token' = $this.Token } -SkipCertificateCheck
             $data = $r.data.data
             if ($null -eq $data) { return @{} }
             if ($data -is [hashtable]) { return $data }

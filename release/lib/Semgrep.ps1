@@ -5,23 +5,30 @@ class Semgrep {
     hidden [string]$ScanDir
 
     Semgrep() {
-        $this.ScanDir = Join-Path ([System.IO.Path]::GetTempPath()) 'release-scan'
+        $this.WorkDir = (Get-Location).Path
+        # Keep reports under the runner workdir so DinD can see the bind mount (not /tmp).
+        $this.ScanDir = Join-Path $this.WorkDir 'artifacts/release-scan'
         if (-not (Test-Path $this.ScanDir)) { New-Item -ItemType Directory -Path $this.ScanDir -Force | Out-Null }
         $this.ReportFile = Join-Path $this.ScanDir 'semgrep.json'
-        $this.WorkDir = (Get-Location).Path
     }
 
     [string] Scan() {
-        Write-Host "[+] semgrep workdir=$($this.WorkDir)"
+        if (Test-Path $this.ReportFile) { Remove-Item $this.ReportFile -Force }
+        $mountRoot = Split-Path -Parent $this.WorkDir
+        if (-not $mountRoot) { $mountRoot = $this.WorkDir }
+        Write-Host "[+] semgrep workdir=$($this.WorkDir) report=$($this.ReportFile)"
         & docker run --rm `
-            -v "$($this.WorkDir):$($this.WorkDir)" `
-            -v "$($this.ScanDir):$($this.ScanDir)" `
+            -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 `
+            -v "${mountRoot}:${mountRoot}" `
             -w $this.WorkDir `
             semgrep/semgrep:1.96.0 `
-            semgrep scan --config auto --json --output $this.ReportFile $this.WorkDir
-        if ($LASTEXITCODE -ne 0) { throw '[!] semgrep scan failed' }
-        if (-not (Test-Path $this.ReportFile)) { throw "[!] semgrep report missing: $($this.ReportFile)" }
+            semgrep scan --config p/ci --json --output $this.ReportFile --metrics=off $this.WorkDir
+        $exit = $LASTEXITCODE
+        # Semgrep exits 1 when findings exist; still require a report.
+        if (-not (Test-Path $this.ReportFile)) { throw "[!] semgrep report missing: $($this.ReportFile) (exit=$exit)" }
         $this.FindingCount = $this.CountFindings($this.ReportFile)
+        if ($exit -gt 1) { throw "[!] semgrep scan failed (exit=$exit findings=$($this.FindingCount))" }
+        if ($this.FindingCount -gt 0) { throw "[!] semgrep findings=$($this.FindingCount)" }
         return $this.ReportFile
     }
 
