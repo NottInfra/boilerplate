@@ -9,4 +9,8 @@ test:
 	cd "$(ROOT)src" && go build -o /dev/null .
 
 test-docker:
-	docker run --rm -v "$(ROOT)src:/src" -w /src golang:1.25-alpine go test ./...
+	@if [ ! -f "$(ROOT)src/go.mod" ]; then \
+		echo "[+] no src/go.mod, skipping unit tests"; \
+	else \
+		docker run --rm -v "$(ROOT)src:/src" -w /src golang:1.25-alpine go test ./...; \
+	fi
