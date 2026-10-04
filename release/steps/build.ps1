@@ -1,15 +1,17 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
-. "$PSScriptRoot/../lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/../lib/Yaml.ps1"
 . "$PSScriptRoot/../lib/Registry.ps1"
 . "$PSScriptRoot/../lib/OpenSearch.ps1"
 
 $staging = $args[0]
 if (-not $staging) { throw '[!] staging required: live|test' }
 
-$project = [ProjectConfigParse]::new($staging)
-$os = [OpenSearch]::new($project.Name, $staging)
+$project = [Yaml]::new((Join-Path (Get-Location) 'project.cfg'))
+$settings = [Yaml]::new((Join-Path (Get-Location) 'settings.cfg'))
+$registry = [Registry]::new($settings, $project, $staging)
+$os = [OpenSearch]::new($settings, $project, $staging)
 $os.Step('build', 'started')
 
 try {
@@ -17,22 +19,32 @@ try {
         (New-Item -ItemType Directory -Path $env:ARTIFACT_DIR -Force).FullName
     }
     else {
-        $project.Root
+        (Get-Location).Path
     }
 
     $sha = if ($env:GITHUB_SHA) { $env:GITHUB_SHA } elseif ($env:CI_COMMIT_SHA) { $env:CI_COMMIT_SHA } else { '' }
-    $releaseImage = $project.BuildImage()
-
-    $registry = [Registry]::new($project.Root, $releaseImage)
-    $registry.Build()
-    $registry.Push()
+    $kind = $project.Require('type').ToLower()
+    if ($kind -eq 'service') {
+        $registry.BuildContainer()
+        $registry.PushContainer()
+    }
+    elseif ($kind -eq 'package') {
+        $registry.BuildBinary()
+        $registry.PublishBinary()
+    }
+    else {
+        throw '[!] project.cfg type must be service or package'
+    }
 
     $artifact = [ordered]@{
-        image = $releaseImage
-        targetImage = $project.Image
+        type = $kind
         commit = $sha
         staging = $staging
         createdAt = (Get-Date).ToUniversalTime().ToString('o')
+    }
+    if ($kind -eq 'service') {
+        $artifact.image = $registry.Image
+        $artifact.targetImage = $registry.TargetImage
     }
     $artifact | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $artifactDir 'build-artifact.json') -Encoding utf8
 
@@ -46,8 +58,8 @@ catch {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDqHvnpWtGbHGJy
-# INfURemgZen+Y2A9Ih53n4GLCFHL/KCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBGwkv2ptV5V73f
+# 5yh/jHHN7uN/dAeenoIENiVNFvrOZaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -68,17 +80,17 @@ catch {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIBbBfX2H
-# wqG8f9d0LVLl0RbPFImgK7PeM/TP5itzaMreMAsGCSqGSIb3DQEBAQSCAgApvWMV
-# aFmgn3cG4Rh7PHy/7qbjo20+NvmfBck2xpasI00qD7Um90EgEmwEwLs6afsv2fnX
-# sSGz0+AGC1yW2uvrs9zbAJNcJTokF/01J2PeWDtj/ysh+DurEp2YalfM7kgLOojJ
-# qYCwSsRG920LGQbPqDnUSSDCgYbBRUQaB6XLoRne5gi8GHg/e1wp5i19IaozQuru
-# uTS1IoVBzSfPKRS0PoiECF7kVzLs+39Pt+H5oLvRCp3RjQIdgulLj6PUjnFHnlF0
-# ud8WOx1FDx2p5/nUnZ2Mv/a9JyaBajRVavmsFnGcq0JjhIT9SeHAuiHaQTt/kpaP
-# QUDSHYUSrrjA6Z14j6C3LaKZ/ntx7tqqRPv/xr7xTIthFq+7nrLnGlhalIPjJ+o6
-# 3SQrpeqwCYqcVkIkUs6cxF8Yh3zxo8ZFelA4zbaIfKQkpM4etOFexputw/nqvL6A
-# qVKaLi9nBAYBi91UIQGqnfX0ylf6KMayja3dJcOiKIKMBZMF5rP1YLG8eKo7pUcM
-# 6oN69XQcPDHubk9+fMxBQysWjgaFNjRR8ZPoMZpiHILk0GO00g28EtcuQ15fE8e/
-# e/KN7XlS5lTQnZDvCeTvuVxvPMYYdxJAB790HMm8TXG76rkvxlIxKWptHbgkoCLw
-# Jb0ap3yOw9NC12T6kkDwNc+vH9C0xblx53Tw2Q==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIPkmLrT1
+# 2Nc9PaosRzjo/P/SCU6szcwos31bwmeYiq1NMAsGCSqGSIb3DQEBAQSCAgBqEO4W
+# CVwYBzie00R3rHNP3Hi+bCinuLTAs67rYLLgSyAc+KiMaSkRqDAkdKEDAYyj9Cch
+# Mu9ADH5wGK9k+LLPsu1d8n91ywt1uSEWGCIOtZnclgYGxLgK59rxXE+PdZRhdkkj
+# IDLHwwtFmB4B63+Ww3txP9SDnX8mu/yq7V246fIBdp8oWwI2dYP56nImjcASBorV
+# f6spjRtHzUlFrH1l75V6qblAw80faMmVTbqoajgvn7AtFKSs0FpJXHVLD2NuIDxe
+# ZqVyhZThzYd7e9ZwcNV4uCE7S+LWLouI1eVnfAiHRZLHJRdDBNQ+eFQ9Mfssecc2
+# D//KK7vm0pY0HnAUEAw0qsLxl8nKjRZ3hjDs9lci4TqvK++xqT/R1SxX6JAkDVQl
+# o5iViI/TTTcNtMksc2zlPRPoqAKpdgBdaiLubGjI44MDagQWajUnV7abBhR+qqQL
+# JdsPwGLNLdivN7iNjDcWnhNiEXDtvSscOX9MUDDpa6LCzzZ1FgwgLclpshCJvDr9
+# 4N81LahztV4RmFzJaPVDa5eHhuEMkNXlZtzG3eyaTI9Rnv/n0wMG1LCSWdmE0ioV
+# QMPzKV7sK7TfhTPpc5ku/PePRLhM9Yc/TvjSa7fbMZs0Ct6H9TkhIGkmoi5hGUL0
+# cxBnDpLU4bbIwz/vr3Ler2ugeblMj0QnJIvVMg==
 # SIG # End signature block

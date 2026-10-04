@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
-. "$PSScriptRoot/../lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/../lib/Yaml.ps1"
 . "$PSScriptRoot/../lib/Gitleaks.ps1"
 . "$PSScriptRoot/../lib/DefectDojo.ps1"
 . "$PSScriptRoot/../lib/OpenSearch.ps1"
@@ -9,10 +9,11 @@ $ErrorActionPreference = 'Stop'
 $staging = $args[0]
 if (-not $staging) { throw '[!] staging required: live|test' }
 
-$project = [ProjectConfigParse]::new($staging)
-$os = [OpenSearch]::new($project.Name, $staging)
-$dojo = [DefectDojo]::new($project.Name)
-$scanner = [Gitleaks]::new()
+$project = [Yaml]::new((Join-Path (Get-Location) 'project.cfg'))
+$settings = [Yaml]::new((Join-Path (Get-Location) 'settings.cfg'))
+$os = [OpenSearch]::new($settings, $project, $staging)
+$dojo = [DefectDojo]::new($settings, $project)
+$scanner = [Gitleaks]::new($settings)
 
 $os.Step('gitleaks', 'started')
 $report = $null
@@ -40,8 +41,8 @@ $os.Step('gitleaks', 'succeeded', @{ finding_count = $scanner.FindingCount })
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCZ+QuUW8QzDNfZ
-# WG3rHiVzrW9yfM7EPB9caCBOJJ5pW6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBHDPm44ILBPhsS
+# szznsvFf76h8Q3r5dXtRAXuSAso4b6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -62,17 +63,17 @@ $os.Step('gitleaks', 'succeeded', @{ finding_count = $scanner.FindingCount })
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIGTPscKX
-# YC2hT8KGiYmhVW93+S3Ji/DZhVF8HwlmdRk3MAsGCSqGSIb3DQEBAQSCAgBQjEiJ
-# hWATs1JEUnJ4N1VDqDayr4esk3kj5LFCGSjsjWdMSqLNALVUpasaP9wJM9QgrSRl
-# mHqBPEbtKmAYsuRHvZ9PvH7+tvcRmdUCTMi3Cvq8FisNH5ZaDQBXV0GUOyYNcVVq
-# fa9He/PaJdCKByrkJOatVYi/bO+zk+0FFV7kjzxezGJQpAsLY9e1LV6CEPbohjdW
-# lWWmoehdEFcZkEUKZ2Wia90Qv9lsHBuzrMB3DL9BXrW996w2n8EunuKZ75RvYPZb
-# ZlMrJWMQ8k7pOU6ybIqC6LllPonDyLbHgotCujkXt89qNsB/Gz/op2KEnyKKd6oX
-# r2B+9TlyPs8KFBPnALg0nz5j73WqCV/5ir/h7LDNbuz40KSUB3YnFs5wpdlvXJQG
-# 97YHdc7yy2Te2iuzvgfvNs9bsOwQwPozd+q5pSIPAgkqu2jO22ZQpf1jA5HRJiYO
-# 8pSTsZV1mUOnSOqQ83pes/Z1GwiITwwh/RxOtJnHqFz79PY7a+kM38nQzocjwdLc
-# W/jRyBdCK9BqiKl3Nd6Hwxf/Ka3SYKEPg3k0o4IXbSNw1j55BEPOj+W3S4+YNOzs
-# Xss0KjUr6I+uJ3/HyAj2Kkjvr/zhBnqkIm4cllFGTynYPANuzPeaKFxrrSCWkHKb
-# I7ciCfcZwaAJEonVu3sZN4tsJSRgq9RCRVUgKg==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIDyHeAEJ
+# hQejgWJib5mHwbjwfeJL69/dYOD+7eQw9AHtMAsGCSqGSIb3DQEBAQSCAgAomfE9
+# YDSyHH4hz7XEBdNmxZaU5x6VCg4pOjXsqkk7f+LkxX8eRb7zuC7FyoxHmEE0dKnU
+# Fuu+pGIocL1ziealcvxOI1Gsyt5UYN/iy2clFWB/bkhI12+Yti3Jtk7HyJkKXDfW
+# zfioYsyCw33sPuuszuaLZsS6LHZ7WW0xs8z04YFZqH/vIutvJikQizUh04rPU7fO
+# wHdPPIr6vPZFQwNjuV6cVn0/8TaUADaI8DEpspVTcZ7Fx/25QidD7Ct8w8T9rLDf
+# jLPIJWnRoWNHCre+h0C8iFvlFKMj2K0xfD/FRhaoCcGrCC4Fq93TBbO6fCCLFxMw
+# kdtVwcCAOx4yFolzeA+pE6p8CAmRqrlkJtmyadtmKjuHLVM7F0kBuIzQRbWtviWj
+# omFSVbg/cNHzSG+XXX+0K0j+0LJOyuqLFCSwNg9JAOeI4zT1kp5TGOu/00ndrFni
+# GVq0U/tT59Y+OmacTPHD9cUCd+RYCG2L3+BcXC9rk273jrAGdbGMorFNnCxKdLEp
+# kqgfTRA7Iz4gsgdiQaL7QiogQyz3YucJS5jNDhRwy+GQc6Ba3OrBwHF/i8zuqSDP
+# MZJljt6s3QyWZuLJBu2ZMCa/a6cPc5EOOldlUdJGiPh9+CaykwYOmESq+k+FCcal
+# XZNeqn7kl2azSkcQV0oeu2k57RxjJDvjgWhgnw==
 # SIG # End signature block

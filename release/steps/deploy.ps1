@@ -1,26 +1,24 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
-. "$PSScriptRoot/../lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/../lib/Yaml.ps1"
 . "$PSScriptRoot/../lib/Registry.ps1"
 . "$PSScriptRoot/../lib/OpenSearch.ps1"
 
 $staging = $args[0]
 if (-not $staging) { throw '[!] staging required: live|test' }
 
-$project = [ProjectConfigParse]::new($staging)
-$os = [OpenSearch]::new($project.Name, $staging)
+$project = [Yaml]::new((Join-Path (Get-Location) 'project.cfg'))
+$settings = [Yaml]::new((Join-Path (Get-Location) 'settings.cfg'))
+$registry = [Registry]::new($settings, $project, $staging)
+$os = [OpenSearch]::new($settings, $project, $staging)
 $os.Step('deploy', 'started')
 
 try {
-    $sourceImage = $project.ReleaseImage()
-    if ($sourceImage -ne $project.Image) {
-        $source = [Registry]::new($project.Root, $sourceImage)
-        $source.Pull()
-        $source.Tag($project.Image)
-    }
-
-    [Registry]::new($project.Root, $project.Image).Push()
+    $kind = $project.Require('type').ToLower()
+    if ($kind -eq 'service') { $registry.DeployContainer() }
+    elseif ($kind -eq 'package') { $registry.DeployBinary() }
+    else { throw '[!] project.cfg type must be service or package' }
     $os.Step('deploy', 'succeeded')
 }
 catch {
@@ -31,8 +29,8 @@ catch {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBzCdDNb4AiugUl
-# YE/0IO1uco8OqEkPCbcOa/C7AJDR7KCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCpcP1THDjcaaTw
+# QpwZ5faXxRwp48/2Hs9D14bzNP0jaaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -53,17 +51,17 @@ catch {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEILpC1cnY
-# 3lrQrVrX0RA1tpo6aPsfusf3fmgiVGSKh3k4MAsGCSqGSIb3DQEBAQSCAgBINMum
-# XvL8Qng8AY1XKCIdPqp7TOYRqsALV7lnXde/OEsBOBiAYnYLv2k41KyeM977dx7R
-# rQu4d8xLojZ2mNAb1pUyVrevb7CUqvep2EnDEOTczZiRU8ibPFSCsx2a0QJ2Arol
-# bu7+WoZX2fQ3W367NRbmk4CFHP91jHZWeAovCach45WXWPu0t9gYU4vPTroZpj37
-# c+EBXn6+x0Pb7V4izjvZSjWSDzpn/y817FHHXLGNfCVsNrL9CfVx5soEcTpIMAw7
-# 2CBIo59LSkOOsxvCtamyAWp/4tWlvku1iiOr0roVfBq/6EqQOIFzaHP/WZ+4HUNn
-# WbW6d5hs3EqJ8XkLdhX+NjjBljBKa3HRZhI2vb9keKVl0ZbmfCPv7+Hm73lb1TST
-# DzSoimwbenH54fmIqe20lbU0Hnwf7jnbV1U85MyC6oAgLM1uvB1KK6mXxaHM48ow
-# lbt0b3Oeez/jW20t8QSIKtEZyXiKIQUMm1rAST0ucgzjyuQDrbAaR1WKLkaPekpH
-# tHvykOi+0IAXnbEVP4AN56mb+BLbUecmKMSNOpIW5wuSD656HBYlfpNBVsMsowOB
-# K0MSMK2W9V/Ylz/QTQCJQENugLS6Zw3+HkRZAjj5V2wQpqII4JDeNXR2DzcDPWBC
-# V8TPud1+1OKIeGNiKOdCLkG/BKSCgp/a+mmM2Q==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIE08bmzK
+# +bEO+JHyDYIlmvmxjNx84D49fAzgs/DgvWXUMAsGCSqGSIb3DQEBAQSCAgB/hO0o
+# G5PlpKL9ikjq+LzYMkAeMEYIDxPJCngw5YXnSzydq/7S0oKEyW+aQVZBtSbKl+bb
+# 7N1Y0fkm0uOgd7wSrrNFTD0KYNdD4L21p+PW+Cg1mtYoBAc+/Qb5jRRgIwadtx96
+# zvbfeLgO/Zwf0/eHu9TaVg5HQL9kupooJS8pcefQwQQ9yjGM4H93Za/0vSFVCb9y
+# tEUQWLt0+awhZFLgfTTxY35NUCgt0Hmo4FdRK5oFuaiGbL+JObGguD68XflWhR9k
+# Oth8Rq1+t6Ar+Dwos2oWMjAr8OvNyZ7f92/Kx3/dk41ymibcRX+qrHpGy7JGXMS6
+# 1AcKzw2Upv8iRkMnS1RbJCLMvpWu8cKwbyCGe1bpG6fFlLODYs4CYoRW92SQPAW7
+# kQEB9ebhNkOwHn6k3UtJGXL3c/uqOBZp2+/DsRubYY7i1JFvGzSsQn3yQFF/ClGm
+# FWbku8AXzhNFtZZqWMXqtJCWSbML1wOuBAZddiyz3hO4ZNxqCC2+j4uJ82lynD8y
+# bDHnRUPaMtbSmWmwEQ/UYOlPzxolHs0prXzytsxu3zhOlvvpQA3M559NxXcvKuJ7
+# 0gAyIqXjEtpt+fZtzzEJdn0NSCOqDEkWz4CI3C3X2604YeKOthRp8U6VggNqlRNb
+# 7DoNTSDToPUa3r75hrhNjQ91CmklI5tAsi6SKw==
 # SIG # End signature block

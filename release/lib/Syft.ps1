@@ -2,10 +2,13 @@ class Syft {
     [int]$FindingCount
     [string]$ReportFile
     hidden [string]$Image
+    hidden [string]$ToolImage
     hidden [string]$ScanDir
 
-    Syft([string]$Image) {
-        $this.Image = $Image
+    Syft([object]$Settings, [object]$Release) {
+        if ([string]::IsNullOrWhiteSpace([string]$Release.Image)) { throw '[!] release image is required' }
+        $this.Image = [string]$Release.Image
+        $this.ToolImage = '{0}:{1}@{2}' -f $Settings.Require('CONTAINERS.SYFT.NAME'), $Settings.Require('CONTAINERS.SYFT.VERSION'), $Settings.Require('CONTAINERS.SYFT.DIGEST')
         $dirPath = Join-Path ([System.IO.Path]::GetTempPath()) 'release-scan'
         if ($env:ARTIFACT_DIR) {
             $dirPath = (New-Item -ItemType Directory -Path $env:ARTIFACT_DIR -Force).FullName
@@ -17,7 +20,7 @@ class Syft {
 
     [string] ScanImage() {
         Write-Host "[+] syft image=$($this.Image)"
-        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$($this.ScanDir):$($this.ScanDir)" anchore/syft:v1.54.0 $this.Image -o "cyclonedx-json=$($this.ReportFile)"
+        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$($this.ScanDir):$($this.ScanDir)" $this.ToolImage $this.Image -o "cyclonedx-json=$($this.ReportFile)"
         if ($LASTEXITCODE -ne 0) { throw '[!] syft scan failed' }
         if (-not (Test-Path $this.ReportFile)) { throw "[!] syft report missing: $($this.ReportFile)" }
         $this.FindingCount = $this.CountFindings($this.ReportFile)
@@ -35,8 +38,8 @@ class Syft {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCASLfVwlHfURqBp
-# bEjtjcqpQDuVDxOTXU/AQpxK//LbdaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCDf4DCzdQV77OJ
+# VP+1qYIOsw15llkWlWjdSJW9MOPBGqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -57,17 +60,17 @@ class Syft {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIJXeoxWE
-# o4GHEtOm1zS9qsj0/1w8qejjX7iDW1cBx7orMAsGCSqGSIb3DQEBAQSCAgAJSxo+
-# Boml0Qnsd9k9k9kPSzVU/uyv2IZlIPO5ADyBwQelCmWFUTQdDjtcMBls5Vma6gHL
-# 7hg/BSRgGjHBq0aHngqMuDi2VYFHBjyjmjm2fccO6yGpVgk5CjS6TYGUNPqKUggj
-# DT8Eh/BTbT5grNCPZx1m2yhz1LKmJLqJOmn8R2snd6ar8xDWa9uWbSJcEU7XRUCX
-# pTsnzdbnWg/eDSg9pQ07Ol7Tb5Ene8mK8+0qn9yUJ+cFsJyoPevL4W/c+1tiXiES
-# 2ZhIYPcxKGtRp036QS01SnKe2t+yTQYRqOfl+2KhRB3cWBpJimi8m24twv9O1OGZ
-# IQ2cpLhc6jaTa/UWZPOUV4d5dIzYkBDUBSCNiNVsXlwrm9Y3l02Fx4RwNh4YVBu+
-# Fg2MySev4TcmvZ2twnR5ZP5S7w8FIHvigjmMmJmCUe7SwsXBj4SOVdZOjhjvdUne
-# SovzBZnUmUD468HbWZHgKNOhXdsSJtdmtZsDSNiT2bOzq4tIVtcZn2xNotweuw1m
-# 375PgszQA1X8WHVm7NrF1fD+0tuSPK4rLQ2zgkSDtAdFhteN8ijwT0RLfXhBV5OH
-# qxk2SRakkx88Eb6IYb+kPmjL1vhDSWO/1cDKELukkcVOR8KhnWZn8k8xLzBD9Qfn
-# t0G50qf8zLYt11aasrojiJT5mzFyUgURh9Z/wA==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIMciXyD7
+# Q2i5EBNBu+3mMun95sBPzrQaR0NrkP17Gk1OMAsGCSqGSIb3DQEBAQSCAgCAqzMD
+# q2urpKngh1wP3FAk0aZcyKVrj2TUAKJ7kKvOFpTjBStiQbbaNwlqb94BF4pVtYV1
+# lAd9e22VYPMVoKcjZXAbEmZI7CGW00pyeekr3erd6BwJGKjNzxuWCEHH0ByZvDOA
+# Nj3V00g4TVl5OwPh3uVVxy+lPBGYxnW5hQWpkWDAhQvDsDb1y3motk4+WEnob1ze
+# PsYd9zzGzkBvS7JXaZwHDwgWx0xXI3lpA5u3APxywFSKi1XppxY18Zu0jz4myDhx
+# g7/aVW6SxrwUyu7C8xqVsKdmFs5xbCNILyywze+ZRuXpzhYr0AXSHbk9uvqnQnAC
+# 6nv5pjK/HYHUGm7QFqONHfUjct2Urb++GmSk7LLlphYA0CBif8Mw3V0iscKq621x
+# xH63QJ04r3oqdhVzwAEXpQXR67fUOM9EQkiVeP5lBGuV2PvOsh8p6Sr+3SsQ9SrM
+# tbxggDcBPQkgsXYW0D8TeWIcsmyXZtEGhfyUJOzcvSAQhtZuGaY4dKHgx5d/EKP1
+# J7uJpqqSilvHUhbBUnefU/VkOHMeB6KLyVHkdAJAQpYMTdU7Z744u2uirjQwjaQ0
+# BU8HLlEDkwM+0EsGGhh0ngqCl1gqlua3EoFvpmxRpZFPaZ2Vq/rwTnFBhCv3ZwjT
+# +rUitZF1yPP57h8UpSzo5/9x6ki39icsv5n+vA==
 # SIG # End signature block

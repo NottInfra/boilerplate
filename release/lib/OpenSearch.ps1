@@ -6,21 +6,18 @@ class OpenSearch {
     hidden [string]$Staging
     hidden [string]$ProjectName
 
-    OpenSearch([string]$ProjectName, [string]$Env) {
-        if (-not $env:OPENSEARCH_URL) { throw '[!] OPENSEARCH_URL is required' }
+    OpenSearch([object]$Settings, [object]$Project, [string]$Env) {
+        if ($Env -notin @('live', 'test')) { throw '[!] env required: live|test' }
         if (-not $env:OPENSEARCH_USER) { throw '[!] OPENSEARCH_USER is required' }
         if (-not $env:OPENSEARCH_PASSWORD) { throw '[!] OPENSEARCH_PASSWORD is required' }
-        $this.Url = $env:OPENSEARCH_URL.TrimEnd('/')
-        try {
-            $null = [System.Net.Dns]::GetHostAddresses('opensearch.opensearch.svc.cluster.local')
-            $this.Url = 'http://opensearch.opensearch.svc.cluster.local:9200'
-        }
-        catch { }
+        $which = if ("$env:NETWORK" -eq 'cluster') { 'CLUSTER' } else { 'PUBLIC' }
+        $this.Url = ([string]$Settings.Require("ENDPOINTS.OPENSEARCH.$which")).TrimEnd('/')
+        $name = $Project.Require('project')
         $this.Env = $Env
         $this.UserPass = "$($env:OPENSEARCH_USER):$($env:OPENSEARCH_PASSWORD)"
-        $this.ProjectName = $ProjectName
+        $this.ProjectName = $name
         $this.Staging = $Env
-        $this.Stream = "$ProjectName-pipeline"
+        $this.Stream = ("$name-pipeline").ToLower()
     }
 
     [void] Step([string]$Step, [string]$Status) {
@@ -54,7 +51,7 @@ class OpenSearch {
             project                  = $this.ProjectName
             pipeline                 = @{ staging = $this.Staging }
         }
-        $this.WriteDoc("$($this.ProjectName)-findings", $fields)
+        $this.WriteDoc(("$($this.ProjectName)-findings").ToLower(), $fields)
     }
 
     hidden [void] WriteDoc([string]$DataStream, [hashtable]$Fields) {
@@ -72,8 +69,8 @@ class OpenSearch {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCAjC3LH4kWOMGY
-# tECd6VaxOcKv2uZb2qOMIcZOPcgEwaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBSFMNjedaNpluH
+# QmoIk7U0nQcnLw2CznBBfYkj5rbjpKCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -94,17 +91,17 @@ class OpenSearch {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIKFrobfx
-# kPPh06Zp19429GsfhfXrSqNMzki7JuqRqdetMAsGCSqGSIb3DQEBAQSCAgCL8dqr
-# E/aIXS0HhjCihUebRM0ihHRqmFPUceY//a0BxvsM45ueuAc3DQw95OA6hosm8Se2
-# V9sM1hh0ATJdwugx1mODYmfzqWdW6VnlULF5WYpwPPrQFKOLJySssYhr3zSrMB4L
-# Da8Ozy+1H6DtnguNUUeh4KGqvNvvTRys3sVCQx72vvVEhqGlkTIUr3t/XNUeN9on
-# 16pjZUaquVci8q3t1e6mUuNgRPq1RA2LkDLH8nx2/74I1Czqcb4dciwhLxRt63gf
-# i307c5qgwiFvP19lH7p7W7aNrqOp3QT4ODbUUg9lIQkSzVRLFquxN74KnKfjw4fp
-# FnMkovUM7BaIzSaX4brxKM7RTHneqNUB0uNnG2utqW5MITeBfGpS22NOb8u540HR
-# BVMVQiUiZfZxfv6iT+5NH1dRjjAnvLunNzKPdjNTK3ESVXc8iz+FIDQRRtqg4G6S
-# QFE/8PwZJo5ZaSbH02jhff2slzvR/OP13weDTJNCyc0iOP2oTauHRHM03cu+s7WG
-# nwop/2qFYw/w6O+SguVx4HR+ooYb3CKKAXlgoHRr24tWy489L8BuXu06FcvMH+PP
-# I2VnzB12qQtQkxRYieSy8TaIfdUi4m83H2f8kdSvRs8JFPhSkhiTtEY9f0phv5KD
-# uPqMs7lq55bwkZekK6ZfXYFuQ2SwrJl9vnD60A==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIPi3uAqV
+# PNB7eeDadd3wo5mFYhSUCMaFPcaIAKStfG+uMAsGCSqGSIb3DQEBAQSCAgB/5x1E
+# rWAos2QXi+58+yrpNTSNHAO3wp8F8QGLx3AOix+EJKxHYm37q1kKEAwouTh7yANm
+# rvDSxj+TSYX9ebk02CT58RauGPRVyTBAas8WWUDYcH6lkZd/HZYN6tvmu5n0+S9c
+# bOscedM8KiXk+HFnYxhYPhdfmHTQJa4a7rzvFBJItOgIyMhtJx2y5VsggXPujb7L
+# UZNT+EcOeTdLhP9dVXl0phnwd/3oFxE9GU+PUGGojRrzqVAcgTl0SlvC5Pyhk/xM
+# t9zIeuBIbCQfO/1ZgrX+iwNjTPZbYlllPlj93HuqEZrHQFnKLyuah3C0Cndbbrlp
+# dMyoL+HQOEE8DMWo0+ZTjnxKcW+Cy0eA1Amz+SgeAVbj1RsVQrTiCK0ruK0EGx/n
+# M4rsGM8d1FZt48sXi75Eg7GuBDXMJDXvoPUu32ZBwLdQWphRhzlQMsU4+Edh+9vS
+# CH1l+A7nJ0HsSkVL1qOcQJzsaHqokXsZME6eJCGRI0248oOYDem5+IwJkWHmw8/k
+# V8wdx8A9gfi905QQK3829zr2i/uDeHD1jpu2L0nsitlRY7illYwaEpqb3s3CvjVG
+# JEzsz+JrdUKFoh6oIygxc+68K3UdqHVEkGh0ONJUNeM/+rFQrOXSE0aK1CPI3re0
+# hWlzYBdamNVqX2QlIAi9KoYIoeh7GRmYW7RZVg==
 # SIG # End signature block

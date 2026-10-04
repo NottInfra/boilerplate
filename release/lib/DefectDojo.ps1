@@ -4,23 +4,15 @@ class DefectDojo {
     hidden [int]$EngagementId
     hidden [string]$ProjectName
 
-    DefectDojo([string]$ProjectName) {
-        $dojoUrl = $env:DEFECTDOJO_URL
-        if (-not $dojoUrl) { $dojoUrl = $env:DEFECT_DOJO_URL }
-        if (-not $dojoUrl) { throw '[!] DEFECTDOJO_URL is required' }
+    DefectDojo([object]$Settings, [object]$Project) {
         if (-not $env:DEFECT_DOJO_API_TOKEN) { throw '[!] DEFECT_DOJO_API_TOKEN is required' }
         if (-not $env:DEFECT_DOJO_ENGAGEMENT_ID) { throw '[!] DEFECT_DOJO_ENGAGEMENT_ID is required' }
-        $this.Url = $dojoUrl.TrimEnd('/')
-        # Public gateway cuts scan imports (~75s) with 502. Runners can hit the Service directly.
-        try {
-            $null = [System.Net.Dns]::GetHostAddresses('defectdojo.defectdojo.svc.cluster.local')
-            $this.Url = 'http://defectdojo.defectdojo.svc.cluster.local:8080'
-            Write-Host '[+] Defect Dojo via cluster service'
-        }
-        catch { }
+        $inCluster = "$env:NETWORK" -eq 'cluster' -or "$env:GITHUB_ACTIONS" -eq 'true'
+        $which = if ($inCluster) { 'CLUSTER' } else { 'PUBLIC' }
+        $this.Url = ([string]$Settings.Require("ENDPOINTS.DEFECTDOJO.$which")).TrimEnd('/')
         $this.Token = $env:DEFECT_DOJO_API_TOKEN
         $this.EngagementId = [int]$env:DEFECT_DOJO_ENGAGEMENT_ID
-        $this.ProjectName = $ProjectName
+        $this.ProjectName = $Project.Require('project')
     }
 
     [void] ImportScan([string]$Staging, [string]$ScanType, [string]$ReportFile, [string]$StepName) {
@@ -104,8 +96,8 @@ class DefectDojo {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBolKt7nhhQ8Ngb
-# sqB9zbUu/w0nQOdl3xHn62I5zln4pqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB6ifL0Ngg+3Qdu
+# Jw9vPFgEGnMRRuurhllItI3sqOsKUqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -126,17 +118,17 @@ class DefectDojo {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIJbmhDCB
-# NAqstIj4AB7AkBI9vkLGUUawkyBE8YxoGIkFMAsGCSqGSIb3DQEBAQSCAgBl/n/a
-# DIBVqdGdXT1TTHrfNaQoNdObneNPkEvf4HOpRMnAVrAX5+b3806jIjy01HjGf7Xh
-# OiLGXMvrEBocz7jzkWqae9fa/0ZskQqJXToPIiUAsF/MuCLiUW8CvQOF3LhM1j4D
-# 5JDqakZ8ervyiJnlMTlnV3/b5qxmbB/6zt4SjgR9x4rHsCl/NR+HrCf2RpJzvu4l
-# HR5Gxits5cUCY1HKqoj93XnVj0qgy11K46BZ/TOzr6BOZdDCCkUaonhEpV5KeR5U
-# bsColaf1yr0MBoyprTTip4zDapwHvDhQBkxl6Zmbzi6ThcU9TaSufMBeAAZILNJL
-# iSjCwGinI22iPkG+cLIU6sh9WCsYppEs5bw6YXOpXWHawytbytqe+CpIXB9urRSQ
-# DFgzivnMmHqvq9CsLQuxmoXLNQFJSFg/cOX+HyffkNK872hzbdyPICS2sNDmSRI2
-# M1c6MvmDn4JlLpbSNZQ2YaWxbh8M3h5HDY8hpEPR9k7jwx5o1cRCpxZ/DFd+9I32
-# HOMUDArHsGG2HzxZ2niJYOCaYK4+6Lphm1Qrdv5jw/5LpIPuj+Rqq72ISLgvB3Vv
-# nj08s5iHsTdcLgyh3gA7TCR8J4bjgPm3yuJT/+tRYsXmR2+Y5mel59/2Pt87hsFb
-# vQb+GEUFdU9+SRoEcl/2sTpN16CX7ZUIa43w2A==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIDbxW8E1
+# 8f+pqEvhCE+UOBP/u/lutv4yb5tnK1SCW1UyMAsGCSqGSIb3DQEBAQSCAgA1NXmm
+# TFhgPtO2JzqpBkqjS5FkjNODG++FjQmYRKsbXOQ+STsUFQrAEEPWvlGumP1FNL0J
+# kS758LDxBhY0sZMYOuqz2iN77qSbQui8/7/+f8xFX+P4yhp0WIWSh/+hkbMbnrdT
+# 6knkIRpxtZwbjvJm6JJqQHynQysQDjVXES/N4IroIowXPlxUd6eIjLbd7hupcTL1
+# n5BFJH4yg74yvOyoql8TCY1mAmUHDup3wiz+HTtRejVBb3IFKm6Ba31M+iF53gJ7
+# t8DoidQWJlGktYr89ZpErgE9CGD+JJNIAlcwgqd88PbtW+JPeKFF/1i6lnguvIM+
+# JPlmrWYmJgZPAY8qrHCLm6m7xKJzv5UMJE22uCWagGR2WmefGKVUc5myYtbzc73g
+# jfLc1oWjLaWLILuk1S2ofBug30TYdnAcFlaci0JVMfIGQnDku/DTsaFCU3HgYotE
+# MviEUIWUwpEu8Rvu/YzxKaRD3BZCS7Z8siXtDsfhND1Bd7L0/n6cfyUBYUEChjXo
+# p7eet+G1M1PMmguPziEAJOvDb/2/vKgYYdsdPl1zwCta/AFYacnGdDRXA6IJaONu
+# XnxEKBslA/JSjdf1b2/oB+VqyJQnF47zghaOZx6ElnfzseaWuMqUgdXCI+z5aG0A
+# MLNbHvV58q3a7kI6PmburIhJ+1tbpWW9mHsR3A==
 # SIG # End signature block

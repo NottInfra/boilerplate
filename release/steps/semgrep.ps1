@@ -1,19 +1,20 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
-. "$PSScriptRoot/../lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/../lib/Yaml.ps1"
 . "$PSScriptRoot/../lib/Semgrep.ps1"
 . "$PSScriptRoot/../lib/DefectDojo.ps1"
 . "$PSScriptRoot/../lib/OpenSearch.ps1"
-. "$PSScriptRoot/../lib/AlertMgr.ps1"
+. "$PSScriptRoot/../lib/AlertManager.ps1"
 
 $staging = $args[0]
 if (-not $staging) { throw '[!] staging required: live|test' }
 
-$project = [ProjectConfigParse]::new($staging)
-$os = [OpenSearch]::new($project.Name, $staging)
-$dojo = [DefectDojo]::new($project.Name)
-$scanner = [Semgrep]::new()
+$project = [Yaml]::new((Join-Path (Get-Location) 'project.cfg'))
+$settings = [Yaml]::new((Join-Path (Get-Location) 'settings.cfg'))
+$os = [OpenSearch]::new($settings, $project, $staging)
+$dojo = [DefectDojo]::new($settings, $project)
+$scanner = [Semgrep]::new($settings)
 
 $os.Step('semgrep', 'started')
 $report = $null
@@ -33,7 +34,7 @@ if ($report -and (Test-Path $report)) {
     $os.Finding('semgrep', $status, $scanner.FindingCount, $report)
 }
 if ($scanner.FindingCount -gt 0) {
-    [AlertMgr]::new().Alert("semgrep found $($scanner.FindingCount) finding(s)")
+    [AlertManager]::new($settings, $project).Alert("semgrep found $($scanner.FindingCount) finding(s)")
 }
 if ($err) {
     $os.Step('semgrep', 'failed', @{ error = $err.Exception.Message; finding_count = $scanner.FindingCount })
@@ -44,8 +45,8 @@ $os.Step('semgrep', 'succeeded', @{ finding_count = $scanner.FindingCount })
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBKuDtt8g5e4SO2
-# BT9WEjMUrilbjIXpj/VMnphyy0QC36CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDxoDou/aKQnuok
+# dCo2vAeVp023ySdKJugVqYxRcA4jzaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -66,17 +67,17 @@ $os.Step('semgrep', 'succeeded', @{ finding_count = $scanner.FindingCount })
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIEzn58Ub
-# lTZnjW1JQ+eD8J0S49iv9QIr15yTyc5b8MT1MAsGCSqGSIb3DQEBAQSCAgAJmsyX
-# 51UWlOn4dXOdo+ztrzwhVvOZT/vMRL4AQR+Xr/7dl+iXYbbMm10WgIAKNP6UDQpr
-# q75WNxFdxYEP7MpzHXjLRw4u/1wTqSXClYfqAE9V0SaXYRIou9j+WlGFpQ0o6i1W
-# /As7pRvqfWNd8lmuZMoY881M8TTlqNLxduzJC9QHhLJdtvhgHpkYzVtNZ9A6LAm7
-# OdyyfzMDFmmAk+FgrbmvU7iQjpX9xMXPXfgRCpSALmHMG8Yk2ye8ElRNMXleoXvw
-# G5V5I1eF/DNSbng7clwiorEeDDOlBaf5vQZi0Spcvq2OZGi/2Qo/AaL4lG192zLb
-# hNSflXcpfbhBqXGG9m/gQJqJKMgriL/2WOH120eT8I2WTp8h001I7JlF/HtfUJdc
-# wnC28Oe6z7D/Dbm2ozsqQvQCZsyWNXbpB9jLB7Zs1ltdWyvQUHP7U7q11pD42gKt
-# WXRrmf0eDT+0ZXKlTLyflUwwEeBdGLxqamAJYVUcwPsALH2hP1usIj8x51AJlvRJ
-# s8WyIZwMHQC63dE6EcAURC5WknfkwkuliEer0Z62wQjp9TxFrfc4IfqVoJCODKXF
-# mD7VC6Qx3JaC09DzBzfKvORqh4dy7QUS+WEF7kuS8bLz+I/bdFLrTGyGPnkeaxUq
-# L8xB3w+WWD6NT2IB0/3/wu9Qn521WTM6QdPyUA==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIBE9Czke
+# cEqdYfvfWCmabM/ktApiG7ZwFbth1MctQVKwMAsGCSqGSIb3DQEBAQSCAgAezlqT
+# pA9ShxSfrVn4dXlihHKihTsJ6KdmJpHdm5pxnAYtO6cUI2j1PROg7tqmgEvbHhel
+# s6yuhk9mkqA39XJ4QZwnigw71TLXOq0dslmqURXadrdItLHbwqBkYiJe9Ov9/2ZI
+# xOgFxYFYHc7cPf9/C2dURkLXbKnKcjYOIDo+V7eLCxbHy/5yidLMfPjYk2gRCEJ2
+# BbikNDNVhzMCC+LhvvOzBYeqm7eXSrFHKfOqwFqbRYz+nNG3okdlqIZ8EJTnINC+
+# xI27wv9IOu0PdkQ6OYzF3h7V6K7nFWSBkSVlqLQ3/+Mn1JvCQazHhhfJAjzXDFU9
+# Utnbnyp8dkhvaAJG40/aI4ONg06grUZzFSBOMS2JzGmSVPa64TmWP6Zka8kz15vz
+# jw809dsCJ8QQ4lIZRiRjZnjctqE9UF8qs3KYO6HwL5sqi55s+9pEHN+DhFiqL9zd
+# c5bHEb8R4e/M+gZDTS1AEpjNAs7QiE/Y7EyFUNebd/Csyclqr+2krisRu+Mlxzs5
+# VmIYXWaqLaev3bCnkGWddYVCPWrW9bsMRzCQg6ysRKxUADRyMwd5CLLPi/9Z/42X
+# D0qj8xyW88DuHbxX4MYRxqCdCuYzXtF1/gAMiW+kixaBLNjYopYSD3E6W+LJYHMe
+# OIfH1YJKtLYUB/092LgUuRZeuxYYcUdpRVsL9g==
 # SIG # End signature block

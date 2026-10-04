@@ -1,15 +1,12 @@
-class AlertMgr {
+class AlertManager {
     hidden [string]$Url
+    hidden [string]$ProjectName
 
-    AlertMgr() {
-        if (-not $env:ALERTMANAGER_URL) { throw '[!] ALERTMANAGER_URL is required' }
-        $this.Url = $env:ALERTMANAGER_URL.TrimEnd('/')
-        try {
-            $null = [System.Net.Dns]::GetHostAddresses('alertmanager.monitoring.svc.cluster.local')
-            $this.Url = 'http://alertmanager.monitoring.svc.cluster.local:9093'
-            Write-Host '[+] AlertMgr via cluster service'
-        }
-        catch { }
+    AlertManager([object]$Settings, [object]$Project) {
+        $this.ProjectName = $Project.Require('project')
+        $inCluster = "$env:NETWORK" -eq 'cluster' -or "$env:GITHUB_ACTIONS" -eq 'true'
+        $which = if ($inCluster) { 'CLUSTER' } else { 'PUBLIC' }
+        $this.Url = ([string]$Settings.Require("ENDPOINTS.ALERTMANAGER.$which")).TrimEnd('/')
     }
 
     [void] Alert([string]$Message) {
@@ -19,18 +16,20 @@ class AlertMgr {
     [void] Alert([string]$Message, [string]$Severity) {
         if ([string]::IsNullOrWhiteSpace($Message)) { return }
         if ([string]::IsNullOrWhiteSpace($Severity)) { $Severity = 'warning' }
+        $summary = "$($this.ProjectName): $Message"
         $alert = [ordered]@{
             labels      = [ordered]@{
                 alertname = 'ReleaseAlert'
                 severity  = $Severity
+                project   = $this.ProjectName
             }
             annotations = [ordered]@{
-                summary     = $Message
-                description = $Message
+                summary     = $summary
+                description = $summary
             }
         }
         $body = '[' + ($alert | ConvertTo-Json -Depth 6 -Compress) + ']'
-        Write-Host "[+] AlertMgr $Message"
+        Write-Host "[+] AlertManager $summary"
         Invoke-RestMethod -Method Post -Uri "$($this.Url)/api/v2/alerts" `
             -ContentType 'application/json' -Body $body -SkipCertificateCheck -TimeoutSec 30 | Out-Null
     }
@@ -39,8 +38,8 @@ class AlertMgr {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBm+EKyo7tX0U2P
-# rQWtJ15DcmhOY712JtAPS7QASrvMS6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCQo4dutW09V7L5
+# ez/HaX1rgr5qoJxLMoClRj+2lK8RAaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -61,17 +60,17 @@ class AlertMgr {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIG1jW6sU
-# hOp2wG3unuE3wUOtGczDRRd3k47b8rQNqPZnMAsGCSqGSIb3DQEBAQSCAgBvMUCD
-# +t50z4r8m4UIpg/t4F5bKDb69E+d4uswi6YQ6IGSOhI5i2msg0hQsEby1cLBTvUy
-# YvJ1DTFUtGrcFduNjWRIYGtymodifEKlNDTNJK5e8DguLSMO5gP/QDSXYVAcKb6v
-# gm2GQnRhGi+WmWNoP0uv9v80SVBMSQHSs0q6dYKANU2KrZZSRi+6KLFTqIpR/JDV
-# 7aCXbt65rFJrzSuktVazT/P20W82FGviWIDCvVajbZ55VP/rweauepxg6CsOycdm
-# cY0Gt4Hr7KS9GUtaNiW3tlsqv50NSInGy5fburTzBgp9tOfR/DeS1lFSW3ztfc1H
-# QS7l7naO35XSth3wxY+aFgFI+iBEuF9Jc06fg/VipwETdRhDvyEPl5hcAW/Gs/DH
-# RkYvFYWpcvpV91XzAGY5FdNAa3nfwF0F2TlN0lmif9g8j3jg2ISyd5v8i+Nxx70H
-# 0nZ6FtYjumQfcCC/IDHD6dYE1cKSG1HRGOM7K/I+1hE3nf8B90Wg8ui/SVJQqCum
-# xmfBGJmBXL28nJL/83FWoMJOj2wqqVQ9TnYIkj5vydmhQK4LCNXBey0iVzj6gsxD
-# Pk9TZCu7X9VqA3kuduEbfq1Sa9SaAXYWaj1nxGhvq0UsdDpMNy+nPETqIEcCjugU
-# rO6t5n3o3mDMqWKdN74ITVxNw4OcjI5paJ4gMg==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEINd31vHH
+# +vaSoYsrtfjylU6UD+rnUDAE00bUO9wjgN+9MAsGCSqGSIb3DQEBAQSCAgBKG5Cs
+# bVWGmWbKAfB+NIvvhid7VT+/grbRyC7EsvQnoSKkk1A39V6ZrhjdsN/I44YFHpR9
+# kfjFRFKnOgY4eIQQUSt//lPumRFujv28tKq+CbjNuyuoEvfm3WnYKHgeazP0fG1D
+# tI87H53uy9b7orL9U/31NeElisM9700GOmYSvAzIqfLTVkObuGBDU/Kh6eUu64TQ
+# f2pY+ZrQ3zEMgHCaZ6Jeaz85yBL8DnAYBZSsE9ircv7Y2RCs/3qvfo/Ksw+oFVbI
+# bPON8Hp1VwK/XwJydyLDrGL4pWf2FSnRVhlj/rt4l2xrsFewMJgCZeMHMx1s/odo
+# 9YBmdt2mZUNnlZ7noW1D2u+gak01URbdSicWmtnFPn/b0akL9rYydGagZWZM9dF6
+# p1EiSIH5+N/vQGrEB3WegQww+ZHhq7goEXeNGJGBKv+fZkgS4BqP7hmCV0mDnsu+
+# NbV2AnwuczUSEpzmF3aeK1DkftXtTqpMWr4JUhOC0va4g8LW9NMrJzSpNCNWMldj
+# ClcM51dy7iRxCWY7oK2lM08xuHDw96uHKKNdfuRiqoIy9FRgvJSBXXhL49LoYt0j
+# o7ODU9UyuR10nOqc6mvWmanSC5YtsW85km2INjSPnK6cDu6hmaaQsMbDTKjLE34t
+# Y3XIfWOa21MGX/GL1kwRPl3EunI98oU+7G4IZg==
 # SIG # End signature block

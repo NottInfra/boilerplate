@@ -2,11 +2,14 @@ class Trivy {
     [int]$FindingCount
     [string]$ReportFile
     hidden [string]$Image
+    hidden [string]$ToolImage
     hidden [string]$ScanDir
     hidden [string]$CacheDir
 
-    Trivy([string]$Image) {
-        $this.Image = $Image
+    Trivy([object]$Settings, [object]$Release) {
+        if ([string]::IsNullOrWhiteSpace([string]$Release.Image)) { throw '[!] release image is required' }
+        $this.Image = [string]$Release.Image
+        $this.ToolImage = '{0}:{1}@{2}' -f $Settings.Require('CONTAINERS.TRIVY.NAME'), $Settings.Require('CONTAINERS.TRIVY.VERSION'), $Settings.Require('CONTAINERS.TRIVY.DIGEST')
         $dirPath = Join-Path ([System.IO.Path]::GetTempPath()) 'release-scan'
         if ($env:ARTIFACT_DIR) {
             $dirPath = (New-Item -ItemType Directory -Path $env:ARTIFACT_DIR -Force).FullName
@@ -24,7 +27,7 @@ class Trivy {
             -v '/var/run/docker.sock:/var/run/docker.sock' `
             -v "$($this.CacheDir):/root/.cache/trivy" `
             -v "$($this.ScanDir):$($this.ScanDir)" `
-            aquasec/trivy:0.58.1 image `
+            $this.ToolImage image `
             --scanners vuln `
             --severity HIGH,CRITICAL `
             --format json `
@@ -51,8 +54,8 @@ class Trivy {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCQ8tQ7XWDLnHgZ
-# m33G6pvQblM4u4Sh4h+zQ+k1e7HppqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA80F2cHQ9NmA0Z
+# ttpE4DRFM0vU9CrTh4lQ684mq+uchKCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -73,17 +76,17 @@ class Trivy {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIH6Zwb5S
-# YAEeXn7rZToabgpRX4aXQYrndZLDi6j/EhKPMAsGCSqGSIb3DQEBAQSCAgA+ue2l
-# VbuGDjhTG93z5XSSTmuayBxhVpvR4T+z+FMcJUC8evFYBt4j+LDl9jmNU2KB1KH6
-# AQYqwqbMjl4MW8pT/VXz2FhBUV8z4rZ2k96Bv5qoZCG61Tws9rw/Z0rIKXFgVme5
-# rnSN6IEDfFNe1bJbFnWgu96tdWwnPBGeB5Uckd4ZunUViGNYJlcxJR8bKeeb0NDr
-# KFY0gdaRrxbke2xRI0KzldXAxHBSzCjnVRAP0rTTuz0QwStUd3JUuCv9Arl2WnLR
-# vxxPJ3GiLxddTxWNFjyEXL6OGaYQwFWRcmMU/rVwlm7uXoZceUuJsOtpd4L5W/EL
-# AdsSIhdnpm0rba7h/hYMmIDv6l+z9kAdDIlunDNVG2yA90Ctrs7E5TcRRLMNKy/D
-# /1lvhaQPS4Of7ezfmbmoIDG+z/zjKjsVWZ3o3dTPRnV1vjZv0S+WJ72/F8xZrWeo
-# nvRAZYPyWcNHgrGPqJiuJF/2bko40s26MDrSqCtbmvOxKk5I0YtBevam50/phO3+
-# NwkP1inYH7GnSiYCCBXGlUBOEdV7S4gGyvQDAs7eGYb5PX2CelZpyjnx1pPjbHs+
-# UjJGGdy5cVkRg93+Z/xWZIMyhzNcnOsaiI4Z9w4jAjGyqQCF9iIeBZxsnVYb82pa
-# KFXODIRO12uy/QrpuFpam6+Y0GXm+18B1EWViA==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIFemvpFC
+# yTBOMvk3j2Wo3Gf+ArhsrKF9dGBRYYe5nHNLMAsGCSqGSIb3DQEBAQSCAgApUpkJ
+# 1QOxt0A9tuWQSnHuHsRCOxKrNkil9IqsAxYpGtyttb3uGxQ8hRPtNqwZJVQM3vCW
+# HK1zQQmLwMOIfOXFnONSV7yd+D8E+3B2ShyrtXCkxsUxw5QhRqgiyU/xdlWG8VH3
+# Bks8VBJeRT6U5HaGmiip1KUW3Vgr0BHc/WGT/pJ1C8XQZZqzCK3dOgFlqSdxKRWK
+# N9pBSYXGeJmMz003v7LpIoZFTTuS1geOhwh6XGUOUwDzSeKpmJEwDj0X8hH2rYnN
+# XBjk4nL2nWSpIm43vFOrOCtqNm71j6eSmvsAvklSgntdGi9wkm4tqZGwFTY4TMNq
+# u7YmbUHe5giuR1BCaYy1Aqu5gaqTHRZ1KxLjPeBxUVJ0T2Xvx5BChrzw296jRA68
+# YmojxPwP9DucWL8gp1nzdXz8ZOZp90ARyvJSzWhQbdK78jbH5u7363w39GP21Sx7
+# DWoisTSMGkVbB4irsmF20Cqa8P6V3oeacZNV/rmCsGhGIpbUzOKdbQoFjRfdGkhl
+# ArZ5969AUyoQcsYJqYPk+95uyVxX3anRPVNdFwidSoG75XvtOd/p/6L4HWnLoqh7
+# ISkdCUTJHboHF4m/Dnkj9fhZAPxQ4gY4qpEm7Cg3RPejxICJapU5tErhFX5iD7yD
+# 5JmlBJ6J8JVTTMRx6hgebdQ9uQqhhsW/OgvKZQ==
 # SIG # End signature block

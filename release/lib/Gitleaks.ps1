@@ -3,8 +3,10 @@ class Gitleaks {
     [string]$ReportFile
     hidden [string]$WorkDir
     hidden [string]$ScanDir
+    hidden [string]$ToolImage
 
-    Gitleaks() {
+    Gitleaks([object]$Settings) {
+        $this.ToolImage = '{0}:{1}@{2}' -f $Settings.Require('CONTAINERS.GITLEAKS.NAME'), $Settings.Require('CONTAINERS.GITLEAKS.VERSION'), $Settings.Require('CONTAINERS.GITLEAKS.DIGEST')
         $this.WorkDir = (Get-Location).Path
         # Keep reports under the runner workdir so DinD can see the bind mount (not /tmp).
         $this.ScanDir = Join-Path $this.WorkDir 'artifacts/release-scan'
@@ -24,7 +26,7 @@ class Gitleaks {
             -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 `
             -v "${mountRoot}:${mountRoot}" `
             -w $src `
-            zricethezav/gitleaks:v8.21.2 `
+            $this.ToolImage `
             detect --source=$src --report-path=$report --report-format=json --no-banner
         $exit = $LASTEXITCODE
         if (-not (Test-Path $this.ReportFile)) {
@@ -45,8 +47,8 @@ class Gitleaks {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDJlYyQ/mN6olIz
-# BVq9CIo8VvzHFf8mvNDOZaQtCT0GHKCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDtZ+GDVXt5a4Ic
+# k4ZbsxoVJa6jzl9Na4McZL45NKt776CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -67,17 +69,17 @@ class Gitleaks {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEINzBUBU9
-# AumeiIA3JK5JUPeSWkrEbvvU42v+m2cLMvlwMAsGCSqGSIb3DQEBAQSCAgBiJwzB
-# REKA1xnTihEnWLiiz8bCQ3wRS+/CibH+XY0J8d4St1SJ5Igr6HPEsMu/s1xdJJ2V
-# d5oOXo557e+NC3q+qA+dQmbNEiFO29QIxIpg//XkbYRi1Nxpw1oHQDHrSr8KHbgR
-# qOWNLw2XnEiv01pStBXHrqS6ZX9keerhjggqp2TfIIpp4kRrsa9l0iazuKv0IpIv
-# uHMLLrpTPhH5XkutUfV93gY4F6DxEnV/vlKxVmAzy7gMGKPQ6KM3ZTEhBmz3C12v
-# LtEhXI7RRjD6YlH1bVqpnMsFG5yXzXJAK/2l8S9k35blod0NUQ6QwfpgNYJa0eXX
-# pzaM3w1RPHfJdeIsU7ZT5vtsy0qk4F4jWkxFcoGw2stUsHq4O9SeyOyQZhW7697P
-# S4WafARSRWu/lb2ObVMfbE6Xvir2BB+uCrJUodpkKtO84CiX15f9rUsXBP+EyXsS
-# YXT1PPafhOlRW+l9lf2epu6H0IvaI0BxB4Zmax0XxyGqx00fUBvQBaf5eXLdUTxM
-# 6y8qDCzo1AKfGCwkUyQlAFmawtdReUydsbizE5Qr69kDgLxrk0GNzE9Zz56Dtk2K
-# CfdKNbqteTBa7hOgbfv9SFlYGb3rXX5jpIhx5Z6Hsji1PqQ0DTL7U0EbORNwPQHY
-# KvgB12KArz0Z5MeRJOxuXgve/MR0/v+mBNPPaw==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIJfvem73
+# DV7U/qoMvlt0sAyg1bamq/G5BpiR+tix2VbGMAsGCSqGSIb3DQEBAQSCAgCVfcwj
+# 297bOc1gKIKPt2/ZBwEAd38uq/oLMALSDPrw578TBHtsXSJjhOzUCX7mIw5Hpkx5
+# wBLRVNk1BTD7EdEoDdCsflNYgpWP/LwGfSg+4YSuYGtjkFKebBjQqL4ITHGMDs59
+# cfy4RPOP+XbfUtfiBthy7UtmW98c/I/T28NPj3Ou7HdLcAa3e0b51ABgJqOfwLJL
+# r5egPm/Ziwm+KxAH2SZ+QN+yH1LR/cvj9EELed0ircJ2+zXpYkwR3oAPPRkZilWB
+# vQ0SzBjHcFAj3iDlaw8vtYgH2jKNn3Tdy2pnshvsQ4/euo5pd7LFOw0hdiYJTss0
+# c5UR1laN0Gq8ZwLpQ9DsyakXqZjZ9SQVvyK13GD8dfLYMZAWJTitqlSMCKTzKpNV
+# zePzCgSxJrei2ROgqweaL2HK3o3XPR/kdX0NM6mtHfbOHH/E5T6PSdZpNAr4RMgy
+# VhvyR78hWecMthl8fDFmpi2yfi8IPk9TjlIYVHyn/IA6Sv+UIaDiWmxl2OvfAvYi
+# r0uAM8I1z70f33JJ8UjV0eJwUMXBcJuWAKCKIG1LRepiOKz8q1IdtuddqxO+IByM
+# yEvBaW/WXFrGlyydg8zGeVgBIYKBTPFKF0n6t/hKEb3RPdmwTqrSjvsEtCbFdega
+# S1DF93l6++D4W0NRAErx/WEgCv6IByH3+sYqaA==
 # SIG # End signature block

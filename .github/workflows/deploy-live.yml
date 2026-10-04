@@ -19,6 +19,26 @@ env:
   ARTIFACT_DIR: artifacts
 
 jobs:
+  project:
+    runs-on: self-hosted
+    outputs:
+      type: ${{ steps.kind.outputs.type }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: kind
+        shell: pwsh
+        run: |
+          $type = ''
+          foreach ($line in Get-Content project.cfg) {
+            if ($line -match '^type:\s*(\S+)') {
+              $type = $Matches[1].Trim().Trim('"').Trim("'").ToLower()
+            }
+          }
+          if ($type -notin @('service', 'package')) {
+            throw '[!] project.cfg type must be service or package'
+          }
+          "type=$type" >> $env:GITHUB_OUTPUT
+
   gitleaks:
     runs-on: self-hosted
     concurrency:
@@ -63,7 +83,8 @@ jobs:
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 sonar
 
   build:
-    needs: [semgrep, sonar]
+    needs: [semgrep, sonar, project]
+    if: success()
     runs-on: self-hosted
     concurrency:
       group: ci-${{ github.workflow }}-${{ github.ref }}-build
@@ -79,7 +100,8 @@ jobs:
           if-no-files-found: error
 
   syft:
-    needs: build
+    needs: [build, project]
+    if: needs.build.result == 'success' && needs.project.outputs.type == 'service'
     runs-on: self-hosted
     concurrency:
       group: ci-${{ github.workflow }}-${{ github.ref }}-syft
@@ -106,7 +128,8 @@ jobs:
           if-no-files-found: ignore
 
   grype:
-    needs: syft
+    needs: [syft, project]
+    if: needs.syft.result == 'success' && needs.project.outputs.type == 'service'
     runs-on: self-hosted
     concurrency:
       group: ci-${{ github.workflow }}-${{ github.ref }}-grype
@@ -121,7 +144,8 @@ jobs:
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 grype
 
   trivy:
-    needs: build
+    needs: [build, project]
+    if: needs.build.result == 'success' && needs.project.outputs.type == 'service'
     runs-on: self-hosted
     concurrency:
       group: ci-${{ github.workflow }}-${{ github.ref }}-trivy
@@ -142,8 +166,8 @@ jobs:
       - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 trivy
 
   deploy:
-    if: github.event_name != 'schedule' && github.ref == 'refs/heads/main'
-    needs: [gitleaks, unit-test, semgrep, sonar, build, syft, grype, trivy]
+    if: ${{ !cancelled() && github.event_name != 'schedule' && github.ref == 'refs/heads/main' && needs.build.result == 'success' && (needs.project.outputs.type == 'package' || (needs.syft.result == 'success' && needs.grype.result == 'success' && needs.trivy.result == 'success')) }}
+    needs: [gitleaks, unit-test, semgrep, sonar, build, syft, grype, trivy, project]
     runs-on: self-hosted
     concurrency:
       group: ci-${{ github.workflow }}-${{ github.ref }}-deploy
@@ -159,7 +183,7 @@ jobs:
         shell: pwsh
         run: |
           $artifact = Get-Content "$env:ARTIFACT_DIR/build-artifact.json" -Raw | ConvertFrom-Json
-          "RELEASE_IMAGE=$($artifact.image)" >> $env:GITHUB_ENV
+          if ($artifact.image) { "RELEASE_IMAGE=$($artifact.image)" >> $env:GITHUB_ENV }
       - name: Skip stale deploys
         id: deploy-check
         shell: pwsh

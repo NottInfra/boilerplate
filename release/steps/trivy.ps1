@@ -1,19 +1,22 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
-. "$PSScriptRoot/../lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/../lib/Yaml.ps1"
+. "$PSScriptRoot/../lib/Registry.ps1"
 . "$PSScriptRoot/../lib/Trivy.ps1"
 . "$PSScriptRoot/../lib/DefectDojo.ps1"
 . "$PSScriptRoot/../lib/OpenSearch.ps1"
-. "$PSScriptRoot/../lib/AlertMgr.ps1"
+. "$PSScriptRoot/../lib/AlertManager.ps1"
 
 $staging = $args[0]
 if (-not $staging) { throw '[!] staging required: live|test' }
 
-$project = [ProjectConfigParse]::new($staging)
-$os = [OpenSearch]::new($project.Name, $staging)
-$dojo = [DefectDojo]::new($project.Name)
-$scanner = [Trivy]::new($project.ReleaseImage())
+$project = [Yaml]::new((Join-Path (Get-Location) 'project.cfg'))
+$settings = [Yaml]::new((Join-Path (Get-Location) 'settings.cfg'))
+$release = [Registry]::new($settings, $project, $staging)
+$os = [OpenSearch]::new($settings, $project, $staging)
+$dojo = [DefectDojo]::new($settings, $project)
+$scanner = [Trivy]::new($settings, $release)
 
 $os.Step('trivy', 'started')
 $report = $null
@@ -33,7 +36,7 @@ if ($report -and (Test-Path $report)) {
     $os.Finding('trivy', $status, $scanner.FindingCount, $report)
 }
 if ($scanner.FindingCount -gt 0) {
-    [AlertMgr]::new().Alert("trivy found $($scanner.FindingCount) high or critical finding(s)", 'critical')
+    [AlertManager]::new($settings, $project).Alert("trivy found $($scanner.FindingCount) high or critical finding(s)", 'critical')
 }
 if ($err) {
     $os.Step('trivy', 'failed', @{ error = $err.Exception.Message; finding_count = $scanner.FindingCount })
@@ -44,8 +47,8 @@ $os.Step('trivy', 'succeeded', @{ finding_count = $scanner.FindingCount })
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB2biFmFvjClp77
-# PmDOfbTP8baHWESWCWs5NDsETP2OHqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCb0ZO7NhSzIQXo
+# Pa+SZONVrQ/dTeM5nxo6GC2Wpk2fA6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -66,17 +69,17 @@ $os.Step('trivy', 'succeeded', @{ finding_count = $scanner.FindingCount })
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIGX5Jiym
-# N3Xjkm3SsthF51hCj/FyE6whvC56343uq7kUMAsGCSqGSIb3DQEBAQSCAgBERV/i
-# g18IiMtnOQK+vwigNGay4IAmnmalRHSHtS9v5PReJtAnmxIh/PFLwtqkcAYps+Pl
-# jDdzmjsDPJ6cuRhENKqP2tvR3rBbFwqGcTYzskTIQ/vEG1Ivzi0qCZMt4gKTQXU6
-# d0RNblX8YCXmWRZzS9Ve6UGHENwmcqgBSew8B7M16AMtETmdOLQctv9jZdeckkCY
-# ryc8WAPK+kgHnD0ylQWk9TDPyJ3UaK52ajQDAOl4aV4PSOroW95pBr4XgU86W129
-# CcWkkmFVelr7/XIfHPLfGw+nH/MO0/yhlfVJRTLerFtmiwv7LcloTnacrorKzyoP
-# Cz2ndRsBX0sQ41X+WWVakH/esnlJn6dRCKXswFy89QImzVTASckt5u6Qt6srIYog
-# 8j706TxcsTatSKs3B8t+4W8zcAkhkrvlD/SsP5/U4gO/93ytoQdCHrtxGY701lwu
-# yXcXorAhSXVNHhTWyXr4z8148a+rXU+Rkq0/Cd1/+mnWqpWL8Z+n6NK9hK8WImf4
-# 5GDYu27vNCK59kN5lrsnTtUp8wekyqBe2MKsdoJ2eT8JWRozaOWTWRsVZdTzGjQb
-# hNLAv/ySZYMC1oNfSejjrve8npLOq2COcdrSjX9AK+J77b9MskkKaOsEIJrLZXVs
-# C5KJ3opmNX1VJgnhHJtQ+yUr15GfE2gt45mmlw==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIJVKUnse
+# T7jMp/VxJTKwrIGm2AOa4ImGn09WEqewEkdpMAsGCSqGSIb3DQEBAQSCAgBeQm1U
+# kKoigtlyEdPEToJiU83wsUMh6o6HrwqchKy+6xJJzwdo+tRh4L4f+rp/63pTVoRW
+# i8cPE/jemL8eoe2Kf+M/JdJ8iZF16kxyYbNRtZAN0unSfWsLkAhgJbpjAoqQixOw
+# eKkZZ1kCDviZu5nwUI8uMs1vULOWRBvHzDBPAKxWDoR/r+S9lgJ2qiNpm0EluBOO
+# f4Th6tIm+Cbot6XqRyfnR6ZJZgavPmvKg3wg1l1kqq4Z6P2Hs+RQtxU39ki6OKDQ
+# QtTZssGHBxSvZ5urT47fppR/LGkf6sklMt1+OwD1hXziYNyWi0/VFWssimOw/9LK
+# H+rX1vvAcWA5SUZxdstk3omFieFFOxza5XLkdZd1kgeR+4oZGRT7EcSDzPd7pAQl
+# O4WNKEmqcIQ7VFdMzBPwTlbMpTb/fwgMaLbYgiA/V5eEITJO5sxhjxZt1GpSkxSQ
+# OjQkQBxf4mgoIJf5IufkE4vXv6KKQjlTeO146MpmgsQOiPaTSeb5z53hoSsrnFgW
+# U4lCS1nCvNtEN9+0LmNliMA1UWZPj0gaPFv7UFE3/w/DeUfCI5FNwLPDYhDpzPPA
+# 40bKDQS9nR9Tsbo+RsdaFKJobnTo0EILtGkGo7pTuWkpTBhnkW6zAsmPsH/XEEQq
+# CVnAgcF88TpCXRWnNzu8AZV2V6y+qln2IFqy9A==
 # SIG # End signature block

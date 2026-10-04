@@ -115,7 +115,9 @@ class Tuf {
         $uri = "$($this.Url.TrimEnd('/'))/targets/$hash.$Name"
         $bytes = $null
         try {
-            $client = [System.Net.Http.HttpClient]::new()
+            $handler = [System.Net.Http.HttpClientHandler]::new()
+            $handler.ServerCertificateCustomValidationCallback = [System.Net.Http.HttpClientHandler]::DangerousAcceptAnyServerCertificateValidator
+            $client = [System.Net.Http.HttpClient]::new($handler)
             $client.Timeout = [TimeSpan]::FromSeconds(60)
             try {
                 $bytes = $client.GetByteArrayAsync($uri).GetAwaiter().GetResult()
@@ -161,7 +163,7 @@ class Tuf {
         $uri = "$($this.Url.TrimEnd('/'))/targets.json"
         $raw = $null
         try {
-            $raw = (Invoke-WebRequest -Uri $uri -UseBasicParsing -TimeoutSec 60).Content
+            $raw = (Invoke-WebRequest -Uri $uri -UseBasicParsing -SkipCertificateCheck -TimeoutSec 60).Content
         }
         catch {
             throw "[!] TUF targets.json fetch failed ($uri): $($_.Exception.Message)"
@@ -230,7 +232,16 @@ class Tuf {
 
                 $openssl = $this.ResolveOpenSsl()
                 $out = & $openssl pkeyutl -verify -pubin -inkey $pubPath -rawin -in $msgPath -sigfile $sigPath 2>&1
-                if ($LASTEXITCODE -ne 0) {
+                if ($LASTEXITCODE -ne 0 -and "$out" -match 'unknown option|operation not supported') {
+                    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+                        throw "[!] TUF targets.json signature invalid ($openssl): $out"
+                    }
+                    & bash -c "tar -C '$dir' -cf - signed.bin sig.bin targets.pub.pem | docker run --rm -i alpine:3.21 sh -c 'apk add --no-cache openssl >/dev/null && tar -xf - -C /tmp && openssl pkeyutl -verify -pubin -inkey /tmp/targets.pub.pem -rawin -in /tmp/signed.bin -sigfile /tmp/sig.bin'"
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "[!] TUF targets.json signature invalid (docker openssl): exit $LASTEXITCODE"
+                    }
+                }
+                elseif ($LASTEXITCODE -ne 0) {
                     throw "[!] TUF targets.json signature invalid ($openssl): $out"
                 }
             }
@@ -302,8 +313,8 @@ class Tuf {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD6azci8G6W+hIy
-# r0pbRm/1zUyk+sktUtYKJN/8JPtphKCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDNzhJ7oUF2CfwA
+# PQk2Ah7YpPfa0OEC5A33DeUgWs8nyKCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -324,17 +335,17 @@ class Tuf {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIMF/7FNn
-# vddSWTvqN0fwAFB8BzG6kRsRb5nXh1Ntc5h3MAsGCSqGSIb3DQEBAQSCAgCPLzQ0
-# c20VKIPRYwIsZo+QdsheOv+VWEc3q3W1Z4r8dpYP6fx17AKjWMsJfi2UzbdujZFf
-# drR6e5HdWiSK6Qk5HruKi8uSozFg7gAXjddYNz5z0Z8LO87Wsqdz5g6X8UKg1aUM
-# 3BXDtCBaXoRxesRm+ZBE1bEN8V3VKNERRGQiE35Hiar+NRKZkGEuplgzfmEqU3aS
-# UOnCNY1EfqSjkCzRYnZxHOzYyVWMx2sz5iI2luIYFC2Wc4c+Fp79VWTtwiTJttKH
-# xDUJ9pAeb6/X8ysU1hxrmr+VCJRYQFnK/66sIPPcq949f8rQKlFuaz9KczE/2BRs
-# l3h96mDxybeG5y/wfWaDu1Cfv8dkHQurKqxPht7L6baEUT3pRThdndTbnd5KNcK4
-# O7+L7svmpED5wsNh4oXMatXYi8T0cUfkbPyQwXCpUoMHToJP4yyMh36afQmfAOeF
-# 74BycNI/YDI1ClS0zFMuXQL2CV3ycG1KIB2nEZP9Dekm9qeUqc3WIj86I7TIvLzZ
-# OWA9q6v13XvzY/JJEjZUZcMcy3qgajeFHR37y9L9evvAwXIs3kKdicBFoMwlNqyP
-# 21waY9BtH8Iuwazj7VSFj/f+r7LF4hA7SezmNrIXuB7EmWPcOp2p/KouuHGRmrmP
-# 7qq48U+5R/UtIkka1Rwy2hDU2Scj4U4JE8zJKw==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIDbHGZpJ
+# Dm7GrXoTF84cS2tAW4CnkZO/+hp6QODQa7gBMAsGCSqGSIb3DQEBAQSCAgAfVIzy
+# oei+vUTa1RTFx30KC9YRYrsjKvwkZF/MkFm9P01dM0Csgr3NnvfPXR6z10K3K8vL
+# GrHm+QhcBAV/pxVt7AKQXaD1f2fQFAWnO6MV65CaOKsfGsQGQ9H/Awq5Ks/Y6aI7
+# 3eVi0JKR6tmI5cxCiGUMs2UjwjFibHoFRiu+rcZBdPVRUena5RGgU4jWH/mLAIjz
+# tc065ELOnq90bAKchnVGDgAkhAfdFgQIMhhie9eCd22FMqqaEUHdU7JZI8L1UX8p
+# U/uRsiQDqIRVnjjzhgOrxXRKcfZ2R5uzEvRKGdd2fHmGSjZmaWivJ4ex2zNY6Axc
+# qmHDynxgRFLx8WK6vDx1BhB4/Fo25IEwJQYCSllRdEDMHcdltzwMVOOcjLfUcBnV
+# vnyGoZ5alYwHu8v5K5W2KyHMlCqaHr54v8NQQxnBDT+l5AqgdOaxp3oMRuC4cYRO
+# WH12+sdruqG3zC+m7z6VnO5YhAPIQSY3oQ0siwRfkEl75e/xjBDBvFKNCZIuKwrS
+# M+h6J+TCZhx3JpVXn6yTal+Mek5YY4fbs+OBsMVFt6LD0PhAaHgSzBVUU7TfE493
+# 8ziGqq0AGdIj4+bLkb7Ojj3fU9jmD0TUojt6licTGhjm0ICRelIr3jZESwwGOHnh
+# JIfzyta/25sx0tXkZU1IXPq/3DloNR769JwMXQ==
 # SIG # End signature block

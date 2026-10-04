@@ -56,6 +56,16 @@ class DefectDojo {
         }
     }
 
+    hidden [int] ProductTypeId() {
+        $headers = @{
+            Authorization = "Token $($this.Token)"
+            Accept        = 'application/json'
+        }
+        $r = Invoke-RestMethod -Uri "$($this.Url)/api/v2/product_types/?limit=1" -Headers $headers
+        if (-not $r.results -or @($r.results).Count -eq 0) { throw '[!] Defect Dojo product type is required' }
+        return [int]$r.results[0].id
+    }
+
     hidden [int] EnsureProduct() {
         $headers = @{
             Authorization = "Token $($this.Token)"
@@ -70,7 +80,7 @@ class DefectDojo {
                 return [int]$p.id
             }
         }
-        $body = (@{ name = $name; description = $name } | ConvertTo-Json -Compress)
+        $body = (@{ name = $name; description = $name; prod_type = $this.ProductTypeId() } | ConvertTo-Json -Compress)
         $created = Invoke-RestMethod -Method Post -Uri "$($this.Url)/api/v2/products/" `
             -Headers ($headers + @{ 'Content-Type' = 'application/json' }) -Body $body
         Write-Host "[+] Defect Dojo product created: $name (id=$($created.id))"
@@ -112,8 +122,8 @@ class DefectDojo {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCQKtlw+R1MEa3x
-# 9fj7+stlPDFKBxBk96EfmK50X594c6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDZveoolDtkiOXY
+# 3DuQzD4pSQxhrW1D+KLM5ezKWcTndqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -134,17 +144,17 @@ class DefectDojo {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEICqzGddK
-# lNjWGY7CgVUw/Q/c+KXqhrvtDBv3+P7o/eMUMAsGCSqGSIb3DQEBAQSCAgCPO3Ek
-# QoMlB0j13JKEx1htZ63n811a1qZQN2Xbc2k6mMztqqVzN48d03dYicvQutw2ksxT
-# BjWhMCuL7cdHVzOzKPjZWb68HFTtmHiqLV2JWlzrCusMmgqFzgJ7snUuwDQnjJwJ
-# jtftoJYaO/Q9k12HjVmDaGsN9wJI2oQlUkJV0bEIjhJtPlwoeDTp9D3RtXtCJWQY
-# ruj83RZbumr7RFu5uFZ284ApvGC31PED0gL0x/wcKQPmGsgCUNJOlIojwgA47dfv
-# btcGD7zrlThbgtYhydmidahLvkk4VvtphQ0s2kciUPDaK2i2sS0sSCGhawSkTwQO
-# Kj4BnbSYQfhW0IGZ8ljU1pXlJW6oQLcN+9aZ8onZ5z20OxtC9ZbogVCvzUIrGJm6
-# 6bML8TdagtQp+VB7dHY84P1CesfEpm1lB3TankjocqvF/a7Zd+aeIoqdia7SkyGj
-# B1WbulRprhjEEhblcQsyA+4oS23BReHRjz/ICTy09rjhC3SWm5nbKu5PcYUeU53G
-# jBHLd2u/oQoahtelqAeqp833TGVBfmnaCZIj4FruCtjHaM3YrtUdoK+LBz+nXaRz
-# TChVwuukGToYHSTv8m6t6LXpNmkWxPNC3RM4uAy8b3qILF6eH60bbMpj2w4rOtN3
-# xMoAxD8dxW9+grYruSAoKwKWux6zfkqxSz+TYg==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIPyiJFsQ
+# wVFhuhNA8sTQg5zY+t6qLjUvARNBwJA0kLFjMAsGCSqGSIb3DQEBAQSCAgCPhOaI
+# aDuYBHYFh/oXB2LbSgd3KIqokBsXOjWUmK1h1qtItGEij401B038mrPbX8OPMoY0
+# yMBTo6Y38Q94QUBTacx2TMwPtcqu4mtWl2jCV/ZBCNFnTsSo7TETrsxk7+Qf6D/3
+# C9xHJ5fUxgNaUu1hs7oH+yKyyRJNEP3PBPJjFZ2ddhfOxWq437qggYbWbLxPppqZ
+# XNRvX2zwyBsrq1CT0miru1vUUqpUakAa18suc/na3bVfwjyNVThD8hJSuqDSpO5y
+# LfIctjPxMnqE7fvxf2Z/jUlAMHD7HMLg3ar41uaJbLUY6werFAfwFqrx3ELcchlC
+# hBkCUSX3ZiF3rdHM1NAzszNr3FLcCQcuU6njWGb1DUSg+VfHZgCqfn8MLIMBT0qS
+# qFQvH0KMC140rImuAL39LVJEgK6yhEfp0oYPndSWUf2F+WSg1mdrFb9PoUPmS1EC
+# Nj49ZvR84I8qaaBPtpy7KeVKS3iREw+ag3aCWGvOfIjLN90xoue/Jov44TlZM9bg
+# koPXap52FD72dSa+56AjdM9UhQq/vLtYr5D3zKAcSBobNOEacDvKbp1ID+R12Buo
+# RgbIQULHq+4XcuB2zzZPlgL3jCiLFESovW916TbjrQiqF9pVvdqBKOrJA27RcwPk
+# xw44i8ssOkcr0vmBkpCRDOtS8WBFcbI0OGeNsg==
 # SIG # End signature block
