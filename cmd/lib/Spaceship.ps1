@@ -3,11 +3,11 @@ class Spaceship {
     [string]$ApiKey
     [string]$ApiSecret
     [Env]$Env
-    [Config]$Project
+    [Yaml]$Project
 
-    Spaceship([Env]$Env, [Config]$Project) {
+    Spaceship([Env]$Env, [Yaml]$Project) {
         if (-not $Env) { throw '[!] Spaceship requires Env' }
-        if (-not $Project -or -not $Project.Loaded) { throw '[!] Spaceship requires project.cfg' }
+        if (-not $Project) { throw '[!] Spaceship requires project.cfg' }
         $this.Env = $Env
         $this.Project = $Project
         $this.ApiKey = $this.Env.Require('SPACESHIP_API_KEY')
@@ -42,6 +42,32 @@ class Spaceship {
         Write-Host '[+] Spaceship DNS records saved'
     }
 
+    hidden [object[]] Entries([object]$Node) {
+        $out = [System.Collections.Generic.List[object]]::new()
+        if ($null -eq $Node) { return @() }
+        if ($Node -is [System.Collections.IDictionary]) {
+            foreach ($key in @($Node.Keys)) {
+                [void]$out.Add([pscustomobject]@{ Name = [string]$key; Value = $Node[$key] })
+            }
+            return @($out)
+        }
+        foreach ($prop in $Node.PSObject.Properties) {
+            [void]$out.Add([pscustomobject]@{ Name = [string]$prop.Name; Value = $prop.Value })
+        }
+        return @($out)
+    }
+
+    hidden [object] Child([object]$Node, [string]$Key) {
+        if ($null -eq $Node -or [string]::IsNullOrWhiteSpace($Key)) { return $null }
+        if ($Node -is [System.Collections.IDictionary]) {
+            if (-not $Node.Contains($Key)) { return $null }
+            return $Node[$Key]
+        }
+        $prop = $Node.PSObject.Properties[$Key]
+        if ($null -eq $prop) { return $null }
+        return $prop.Value
+    }
+
     [void] Apply() {
         $this.Apply(@{})
     }
@@ -64,12 +90,15 @@ class Spaceship {
             $items = [System.Collections.Generic.List[object]]::new()
             $specs = [System.Collections.Generic.List[object]]::new()
 
-            foreach ($prop in $dnsCfg.PSObject.Properties) {
+            $entries = $this.Entries($dnsCfg)
+            foreach ($prop in $entries) {
                 if ($prop.Name -in @('registry', 'sites')) { continue }
                 $specs.Add([ordered]@{ Type = [string]$prop.Name; Spec = $prop.Value })
             }
-            if ($dnsCfg.sites -and $dnsCfg.sites.$domain) {
-                foreach ($prop in $dnsCfg.sites.$domain.PSObject.Properties) {
+            $sites = $this.Child($dnsCfg, 'sites')
+            $siteNode = $this.Child($sites, $domain)
+            if ($siteNode) {
+                foreach ($prop in $this.Entries($siteNode)) {
                     $specs.Add([ordered]@{ Type = [string]$prop.Name; Spec = $prop.Value })
                 }
             }
@@ -78,7 +107,7 @@ class Spaceship {
                 $type = [string]$entry.Type
                 $spec = $entry.Spec
                 if ($null -eq $spec) { continue }
-                if ($spec -is [array] -or $spec -is [System.Collections.Generic.List[object]]) {
+                if ($spec -is [array] -or $spec -is [System.Collections.Generic.List[object]] -or ($spec -is [System.Collections.IList] -and $spec -isnot [System.Collections.IDictionary])) {
                     foreach ($name in @($spec)) {
                         $items.Add([ordered]@{
                                 type    = $type
@@ -89,13 +118,14 @@ class Spaceship {
                     }
                     continue
                 }
-                foreach ($rec in $spec.PSObject.Properties) {
+                foreach ($rec in $this.Entries($spec)) {
                     $row = [ordered]@{
                         type = $type
                         name = [string]$rec.Name
                         ttl  = 3600
                     }
                     if ($type -in @('A', 'AAAA')) { $row.address = [string]$rec.Value }
+                    elseif ($type -eq 'CNAME') { $row.cname = [string]$rec.Value }
                     else { $row.value = [string]$rec.Value }
                     $items.Add($row)
                 }
@@ -129,10 +159,10 @@ class Spaceship {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD3D3FObidkBtTb
-# BFWeBcoqiYqD1mkEjvaoME/K3t1A36CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA0r12Yq2TjxgSO
+# thELfHxC1Z40a2Xe/l/zNQSdATF5ZqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -150,20 +180,21 @@ class Spaceship {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIPJnmgv6
-# SbFH/U47POKvfNLTj+9YenA8Y9z10mtCaeTVMAsGCSqGSIb3DQEBAQSCAgB48ub5
-# /Bhcf5nOFzNhyTK3cZKa9O3k7SuM0flvdc4FyXsKII3MmNXJSutE4Km9nnKpQeC7
-# qd0u4mBVKuf8+7NXSk3qoiFe/G0fmlWi4OwDbz9eJkpPoMtLWohBCjEzIsgK1CjZ
-# nfStE+IH30TAr4yZZ5WxGiTxkeGnHeHttEt8P7L5CHSlFQ803+nyp2I2YNSMNh3M
-# 7Gm+upoZXE+bhd9UmqXYbj0fbjKxsqVve8JIUbNWat1DgYWRdwM2/VuamPl1xjFt
-# yFZAjT4IP4xdHcG1qrUDS0QT76D1dMpzgIjurJs1NstAwBuPgMbm9tIEvTW1UCoH
-# 0FUKhLnd0wpYFKf1XIP9cY71PTGSErEKuz4zhC7k6gXNdmY4jYmZ+RvHSRzA1j43
-# 26F2BEj9MOaRYS80lfO3RtQB3LkDvAKmHyBnyMG/JfxvTSxLShouq5XyGBOdSOlh
-# Rbt0XZoLiwfZcOiGDh343B2D1zA5hyOUa/3cNN+OBTnIGntidTGNU7/DeEEnaUTW
-# /8xe9y6YFsn3NYFFR6FJMpWQOEfRrwqXzUrR4gI0O4YAcaA2TtwGidbxPv6G04bI
-# 3u0G9CWhxvYMefnI7f5aCfrNf7aFwpquLuZRi1jhyN2ZoB3Yelu4kXP3060u3y/I
-# tUnFVWQ82wyCIG23MA1fvn/+eCDxfe6Pr+4fQg==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIPzDj+Zn
+# otu34agnhcm5WqmCSxaDH9YYa/LFB4WTUl4QMAsGCSqGSIb3DQEBAQSCAgAVGD2j
+# aUyoReOjw/ePJH7MdrPBN6rp2lMq7bgP820Dy4DCvmmsWBISs7FDI9NNU1LzpMOE
+# OEYQXJ++LvCV2jDiC4BR0ga/QVB2/FMPO0wpRrP5n0IHyrg8ClIFNptvuzfG1F4b
+# gN6lxcddZ1E/g0rouXcwbE+SCQV9F2CGSrsVT9pxvuFlbSGnH+iePSMHuJOYN0Y7
+# HzmVLhe6TIVZwGTjbz+7oBMm4Wdg4uYoGeTxAEvvbTahSuJsS94Bq1CinQCszq5e
+# OUltec5x6++H74bCxtB27Sqm0RxTprxZ+HwEYgwHrPmfwsU9m8iBd0/AME1uSjda
+# 2A0hjj1JBKGyma/Fhjty5kvO22ho4N6dDGEINmX+XPpkne2pBPFICUmJP6aPgUo+
+# sTjaLH9BY2PHVzxKd4Bbk0HvQrXaCU/dUqTiilz8sKHiGlxFifC4f3f23jiCvwbp
+# G613NYhwXagaUPlBHd7nnMr+pT47QGlxWJSPTWy6AfeCZ0g9h7zkmsaII9YEz3Jp
+# 2abmtpqGrJFnAciXAjk9hOlUGlf3Qxwyl6t1aBXPuj6nUiDYgONggQkzpUwvMad8
+# jvUVGNwSzjdr0kZJXYsTaLPBIVBqtGkrFACF3MX3bqeSR6oynavE2fA0EigCAmiu
+# EhGFpB0aImFK83+8NxFFgdEG0H8vvATBLRwEwKErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

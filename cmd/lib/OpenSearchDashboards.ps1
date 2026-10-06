@@ -1,10 +1,10 @@
 class OpenSearchDashboards {
     [string]$Url
     [Env]$Env
-    [Config]$Project
+    [Yaml]$Project
 
-    OpenSearchDashboards([Config]$Project, [Env]$Env) {
-        if (-not $Project -or -not $Project.Loaded) { throw '[!] OpenSearchDashboards requires project.cfg' }
+    OpenSearchDashboards([Yaml]$Project, [Env]$Env) {
+        if (-not $Project) { throw '[!] OpenSearchDashboards requires project.cfg' }
         if (-not $Env) { throw '[!] OpenSearchDashboards requires Env' }
         $this.Project = $Project
         $this.Env = $Env
@@ -13,7 +13,7 @@ class OpenSearchDashboards {
 
     hidden [string] PrepareNdjson([string]$File, [string]$Slug) {
         $lines = [System.Collections.Generic.List[string]]::new()
-        $title = "$($this.Project.Name) / $Slug"
+        $title = "$($this.Project.Require('project')) / $Slug"
         foreach ($line in Get-Content $File) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             $obj = $line | ConvertFrom-Json
@@ -22,7 +22,7 @@ class OpenSearchDashboards {
             }
             if ($obj.attributes -and $obj.attributes.PSObject.Properties['description']) {
                 $cur = [string]$obj.attributes.description
-                if ($cur -notmatch [regex]::Escape($this.Project.Name)) {
+                if ($cur -notmatch [regex]::Escape($this.Project.Require('project'))) {
                     $obj.attributes.description = "$title — $cur".Trim(' —')
                 }
             }
@@ -47,7 +47,7 @@ class OpenSearchDashboards {
 
     [void] ImportNdjson([string]$File, [string]$Slug) {
         Write-Host "== OpenSearch Dashboards import: $($this.Url) =="
-        Write-Host "    $($this.Project.Name) / $Slug ← $File"
+        Write-Host "    $($this.Project.Require('project')) / $Slug ← $File"
         $body = $this.PrepareNdjson($File, $Slug)
         $tmp = [IO.Path]::GetTempFileName() + '.ndjson'
         try {
@@ -59,7 +59,7 @@ class OpenSearchDashboards {
                 $r | ConvertTo-Json -Depth 10
                 throw '[!] OpenSearch Dashboards import reported errors'
             }
-            Write-Host "[+] OpenSearch Dashboards: $($this.Project.Name) / $Slug"
+            Write-Host "[+] OpenSearch Dashboards: $($this.Project.Require('project')) / $Slug"
         }
         finally {
             Remove-Item $tmp -Force -ErrorAction SilentlyContinue
@@ -78,10 +78,10 @@ class OpenSearchDashboards {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBrAcjwr8hz47RZ
-# KPpYND5HkXsBBew8PimU1CxSwqfuFaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAjkr3SMxC3ctOs
+# fY8BzkQnvRmaJ61QHEpyOkqdCbSuOaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -99,20 +99,21 @@ class OpenSearchDashboards {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIJmBkeqB
-# VJWy7PIUAuYFSOskrQo88Glpz1MAFWh45B3vMAsGCSqGSIb3DQEBAQSCAgCiYCbp
-# a63OViM17WjIiYiGipJkWz6BvTH9ky2crHeyjFOAi1uaq76Ky/i3cKh0TdIFgGb0
-# bK7z6AtWTE52VrBfdk9wc/alWX+DeG+s7wKV+XwUhdbKBO2aIHXE/KvqYMCQp2hM
-# GV/ix6rJWExf1p4Zi02F8/jnSECltEGqeWAZ3Hy3p9svQV7fGoLlNa94sQ6IOhhj
-# hM3SFQUZHpkwHHi6+JDvm5ewD1uwqXkLuGwq3N5RzV01cY3vIMZW3hRzl3BEnAq8
-# a+jJefYeqkwDqbbw2rQnW1GnnXHFxX9o0kn7+2VZdrZMAJR6yPHAmwhfr4zyQGqM
-# xdRdHCPbRGhrz7sxBGd2rhrgjK6UZf/fYj0nGqft+gpvSbuX4rvss45K+kowY3R/
-# RVOZ+4DAaFQ9Xqw/sFsixPKM69wmzmLEPDVAuGctWSamqN1Ch3cZnBkQwWO9u9xJ
-# 8QCeck0I8uoeyTLRw9HwQDIfxCKEB+/Rz2pGg51g3qUMQgW/+qLcu20b/BZGT3Ut
-# 5jpI7qHjBv6g0P4Dnx4AJ5BnUCFNtp8NpVfu9tvLTZfcvzqdfKcHnfhrJ7fI4AdU
-# kwfaT6Yt+029DBcf7O6kG+skjXMURNne+rRSWIwfFGi7jXlNS0OmlmhOLzwUvxpJ
-# 5mcVn0q8iT5Oti7ELOxKJFK6kT3vtSILt+sPyw==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIEYBeLBU
+# 9SQgNCqpfdqREtnR1TpJ2Fl6UCiRs/kLS2oIMAsGCSqGSIb3DQEBAQSCAgBgp9U/
+# k4/tyvq9PQyK3kyzT0JBlFCwZ5WYAcz8alc3Iiyewve/Nww6+8TtQ2PFiiYxRS7X
+# L5RyPdEfZRNahPfteoqqm/0PpiOz7ach+A6KGpKGF+wzDOIG3UD3jOKNJbf4kpHK
+# LzBUyuzCXt38JKJR5HcxCwAcJ/2HUElC6mIINJlTYDbP04u/V0syrgIwn7XD/Cb7
+# cqVsP4AZ6xnGAmzdVkyEbyQTvq/PbZbnxDtmJ0qGELiKMBhsX63nortMYSxeFrh+
+# G+yewrUYd40DqUl+SLFpNOHN5Pl/9n3jVSdItb/NHvR0WzhMB6UxsqlA2STKgLbQ
+# b2JUM6agBmtdAbJ5QDBZoH7oXOVZP9WXJnOEfjJwBY63tovyGHrewkeUzx7tUR96
+# YvVOx6qa7GbV3wsf1+3YgXy8jl4+24GGOeNSWi5PnLcnwP5w0eSXQewenS6A6Rl0
+# twS1FzCH8OFRMhGAXfDK4OTkiEgyIHg8gnLeKvt0G1D1p8R4FYsRlAgSBujIlAPU
+# QUstgk/fnLIro2kk2KhHi+WYRQOwJZEht/sMVozQCqx++prN4j7nOsHgMs79az5f
+# nBI6+EfRZLigMoGRdRUP16N1KrNvvZe3klQtwbyH64f3wseSsJpTp7zbVpwl7ZMV
+# mU19KNcFwkbIMUc22EgvuGuj6X9AKOtw/VKw0qErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

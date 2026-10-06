@@ -1,14 +1,15 @@
 class OpenSearch {
     [string]$Url
+    [string]$PinnedPublicUrl = 'https://opensearch.nottinfra.co.uk'
     [Env]$Env
-    [Config]$Project
+    [Yaml]$Project
     [string]$Stream
     hidden [hashtable]$AuthHeaders
     hidden [int]$TimeoutSec = 30
 
-    OpenSearch([Env]$Env, [Config]$Project, [string]$Stream) {
+    OpenSearch([Env]$Env, [Yaml]$Project, [string]$Stream) {
         if (-not $Env) { throw '[!] OpenSearch requires Env' }
-        if (-not $Project -or -not $Project.Loaded) { throw '[!] OpenSearch requires project.cfg' }
+        if (-not $Project) { throw '[!] OpenSearch requires project.cfg' }
         if ([string]::IsNullOrWhiteSpace($Stream)) { throw '[!] stream required' }
         $this.Env = $Env
         $this.Project = $Project
@@ -83,7 +84,7 @@ class OpenSearch {
                 script = $Script
                 status = $Status
             }
-            project                  = $this.Project.Name
+            project                  = $this.Project.Require('project')
         }
         foreach ($k in $Extra.Keys) { $fields[$k] = $Extra[$k] }
         $doc = [ordered]@{ '@timestamp' = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
@@ -103,7 +104,7 @@ class OpenSearch {
         if (-not (Test-Path 'alerts/opensearch.json')) { throw '[!] Missing alerts/opensearch.json' }
         Write-Host "== OpenSearch alerting monitors: $($this.Url) (ENV=$($this.Env.Name)) =="
         $raw = Get-Content 'alerts/opensearch.json' -Raw
-        $raw = $raw -replace '__ENV__', $this.Env.Name -replace '__PROJECT__', $this.Project.Name
+        $raw = $raw -replace '__ENV__', $this.Env.Name -replace '__PROJECT__', $this.Project.Require('project')
         $monitors = $raw | ConvertFrom-Json
         foreach ($monitor in @($monitors)) {
             $logicalId = [string]$monitor.id
@@ -151,10 +152,10 @@ class OpenSearch {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD9Bzr5rgc5y2JK
-# MyPn8D3ZIftlqvJQ6IGuEbcTYXkKbqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA+LHSbJJ7nPwxa
+# cGj5eV3H8KpPqIlsIrZ2h4t5Vhp50aCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -172,20 +173,21 @@ class OpenSearch {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIORtz8Rz
-# +eVl7bV5EfMH77Sd4gvZ4A+U95lLiaGFz25tMAsGCSqGSIb3DQEBAQSCAgAkzhZI
-# dH9L6wqv53dTEo7XQgar1lYiRGtMHou7dxRagFgfVMj5DJEEaqF3K9yPE4/feCbX
-# DA2moQN05TDUGi8ewRqRqJByMgJHjDjR0jRi5obvTf4rI8YpGwdmpWTSbUMpwCTe
-# gD+d5x62nTs2n1frfylQ7aWxH59x+Pfnd82+z5p7tZUvHDBdqjflhL2YA+TkI847
-# H3XGsYL9fyBqE4I171g3pIXLcMfEovpUVh7ymOOfB33fQQ28mFGdGOaQ1tEAVQSq
-# kS8dUthWD6wncRxohqBG56MtmK5mvuSmyG00FK6/qG3Ij/XXxvkUf/TRR8kEFdgV
-# 4FHoX6fU0+xDb7LJQ+2w19GR9I3d/7mITe/zsfuHNFvCPGJAgkM3jhZdecRlf0Gy
-# HZ+EqUAf863gcphGnjj9PNh83heV6qrO3tNgPHCsk0jAj8iSarJcfL8rP4xG6iA4
-# 9+aXP5coUj9jLxuJ0Bb2+7cAy1NHuEhpjeeSD6OhyBSKvxDvlAt+nn8eLgpsNTBf
-# IOXGU8ZrCSVzwFKEACqcnzvBeEmrhJ/TR6zUNTgj6l2gwGRJFGLuVyyDPAo/QIMX
-# MU/AMqrWE3UKIcr4XC4HQTAUH0dTxbDpapfzvSFE5SVY+x73qaJlFs+l+q7gDBsQ
-# ey12oqIDXXFZj6asMNan7UAV8Wlq49VAVCg5YA==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIJhylcfd
+# gzxn7J6tnkngIiJB9yBDhZpJoPCGeTndbLTPMAsGCSqGSIb3DQEBAQSCAgChXkyt
+# FIW2HI9m/fRewfv7tRCN8DQ83YpHfK9mfZqvHdZnTXtaQWHK5nC2pR8Z7abEI4eZ
+# NRisIs1e5OGdsOQJLMeOFpEpgRp4YCqDWUcBJwyj7UT0Y+Nroh+4suksqrZSCbb0
+# ERgTgvegfPZed7PZnjdKtC8kIhOhmKtPmcz27Gg7EqQ1bfST/yZ0XzxbONH394BX
+# fAqwp+MVO4C4qQyCzMhl0JB33cqeE2EhqFLjgVnKrBv1Ed+OHbN2BXSa33JRzkV5
+# iM7+nxb9bD+eyUoGABk+L1YPD+RZaBcrL1gwX4Zm0xruCYUuhWbDxreDoB9Lzdsk
+# ec2wIiGlFj0DSAUFmb6KJL6NW8WI6k5VKmYU65cVyQt8Q5FQp8gGa9fuYBE68wdF
+# TSjuXVFS7S0i/bOdVHZKNkBBzel3++yw8D89pnKIJVlyJjE+p0r3D6o3aEQPDB4u
+# /2sR+enirr3oGMxMWPwJpsobNZG+m7m7JOZdrCYINtY7XmDXrVv6AM3SCc1PEsI8
+# WOFgAA1H3BzWElSVMCbwtgNrH8HQZFtPy5FRyDPc3ApoXV+bpKas4OG44p15lWOf
+# bS76kLSmOY0ncx6d08kJFAJ60JRndf1XjYD+B8oZ60465rGDFuMiu8/RW2YKaTax
+# Y2sODnVBIPqxHmPOJ9skpkqlAs3rAj6pKCdZ26ErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

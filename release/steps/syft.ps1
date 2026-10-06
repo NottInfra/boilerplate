@@ -1,19 +1,22 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
-. "$PSScriptRoot/../lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/../lib/Yaml.ps1"
+. "$PSScriptRoot/../lib/Registry.ps1"
 . "$PSScriptRoot/../lib/Syft.ps1"
 . "$PSScriptRoot/../lib/DefectDojo.ps1"
 . "$PSScriptRoot/../lib/OpenSearch.ps1"
-. "$PSScriptRoot/../lib/AlertMgr.ps1"
+. "$PSScriptRoot/../lib/AlertManager.ps1"
 
 $staging = $args[0]
 if (-not $staging) { throw '[!] staging required: live|test' }
 
-$project = [ProjectConfigParse]::new($staging)
-$os = [OpenSearch]::new($project.Name, $staging)
-$dojo = [DefectDojo]::new($project.Name)
-$scanner = [Syft]::new($project.ReleaseImage())
+$project = [Yaml]::new((Join-Path (Get-Location) 'project.cfg'))
+$settings = [Yaml]::new((Join-Path (Get-Location) 'settings.cfg'))
+$release = [Registry]::new($settings, $project, $staging)
+$os = [OpenSearch]::new($settings, $project, $staging)
+$dojo = [DefectDojo]::new($settings, $project)
+$scanner = [Syft]::new($settings, $release)
 
 $os.Step('syft', 'started')
 $report = $null
@@ -23,7 +26,7 @@ try {
     $dojo.ImportScan($staging, 'CycloneDX Scan', $report, 'syft')
     $os.Finding('syft', 'succeeded', $scanner.FindingCount, $report)
     if ($scanner.FindingCount -gt 0) {
-        [AlertMgr]::new().Alert("syft found $($scanner.FindingCount) finding(s)")
+        [AlertManager]::new($settings, $project).Alert("syft found $($scanner.FindingCount) finding(s)")
     }
     $os.Step('syft', 'succeeded')
 }
@@ -35,7 +38,7 @@ catch {
         $dojo.ImportScan($staging, 'CycloneDX Scan', $report, 'syft')
         $os.Finding('syft', 'failed', $scanner.FindingCount, $report)
         if ($scanner.FindingCount -gt 0) {
-            [AlertMgr]::new().Alert("syft found $($scanner.FindingCount) finding(s)")
+            [AlertManager]::new($settings, $project).Alert("syft found $($scanner.FindingCount) finding(s)")
         }
     }
     $os.Step('syft', 'failed', @{ error = $err.Exception.Message })
@@ -45,8 +48,8 @@ catch {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB81Y5p2kbMSpqn
-# JR1zuFnBFIkTh7Tl//ZeinbViyCCFaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC3MRnpmkIkms2g
+# OumgAShXxl+iGD3/qfBpULIHOeFpf6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -67,17 +70,17 @@ catch {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIHi3SFCh
-# mzptzpjfaD9ZZxdsXvHvVgSmyJcdfq7J6lNdMAsGCSqGSIb3DQEBAQSCAgCIbkgn
-# TVlBTXD11HhXQIBo/Uaui/NaAQOXDHx2LbBCanhy+GJAKoY6C+1QUCY0gNBn13JY
-# srcyyoxnb3OS46gEzDt5UrOYItMMg1iu2efpF8SNjL86IioW++2qWigeKGbmsdky
-# PR/yO8THfINY+pT7QpfhT/H33kPInFW0rveOd5A9ljIWXk2m4svyw/1Amz8CRJIC
-# assfNrPvhcJ1bk3U//rqOUXbz8I2eFOz/6wdliZlEkzRp8PJFFMMt0As/lIJAeVD
-# Z9vZDh7xXLV0W+Oaqn7e/rr3Nv31jIe5SP7rEONo/9QloFnmbJHmjf5S/ud1ccNC
-# CV6+sCfYv6phvYO0kZwl6l7DLrcgvkDO52Y+oFzLZNW4pXZ5aBexrXy+ZnWgHJMF
-# DgZ22xgdP7UHaAE0TtmURrV1WJffA/+XyBgrBWj2wv7ChdFxfgNEHH1ncyJal2Dr
-# c3xuMyzvAOlkN0YJ192lItW+usLtbwqm2sb576TZMP/UCEp8LXXDRipF1iYFoXRv
-# EDc/KIJDqU5blUoBmo2r64cgcn2nPOzIn+P65aBAYqNw5YzGj4GpWHbVAouelB6U
-# UWS+sOX/YyWn85mFZaytp+eUVLzFX9ybUZJVFP1EHZe/n/P2ydMQNTU2upme7KMr
-# cI+yRtPM1HjSFnrJJH9ETJW8mPFm8W0YEME+5Q==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIG0WwjgL
+# YIkf70h3+Z/Q3JabGwY5+BwPiiYRz1uIp4FEMAsGCSqGSIb3DQEBAQSCAgA1kmQn
+# QuQaSnwXaQ2Mzz423MWptf8s9QPuN4jcFQR4tkYe+KrQ5E+6BP0f91pBH0qe5Nfj
+# VrRLb8p5rOjspgZ6ZgrZCoPkbGmesQzIOcmjfQxBnBOhIMAPsMjyuXrQhmOT/qlI
+# GD1IF3C7ITSC2CguAZ06nJ0BywHrugy0Cpw88WTUbhXyTipd4aD/GZl7LyU6Wh2Y
+# emyxunty4ICOnVTyZIu6sYV/BSIrBoU0n7SIJg78H1yWd5GirFXA5boUDVEwZbTG
+# 7dJ9XqWHPsJIhZt38PZCTh8qEnqLvvkir2ENDTEnyO3JtVZK2yfEDagl/yNm16fH
+# INgbrxLp+pqobABeUq2SLq0Ww2jfQtUMzVxLVWKBaCbOMjXHxETjWz20BsHTN6K8
+# YDjLDCzB31bmoO+QnTeF2JNIR4++pAEDSJ/4CejGtslHM1sRCi4sBcLH0XD6Nv+L
+# +8UkqRuIycIWOn7b6lYz71Aj6hlI5dkYjYn6aMNO3K7PzfPofVSN/eM2t6WzVg++
+# pAE9wteZHs8WMFOF7HEJDiBiChtUYvaAngwWbHF3SrKNszgA3y8DyRfuUAQnnKgi
+# sgtLaUV6eH+nSMgQu07RE+ckziHS7rnnPSCohEVV6ZabKeb6Pfz32PwN3VWXjZCF
+# 7kkK0jO04aj2QnjD5C4MAxmtG1BCcZ3Z/G3yLw==
 # SIG # End signature block

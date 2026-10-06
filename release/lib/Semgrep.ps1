@@ -3,8 +3,10 @@ class Semgrep {
     [string]$ReportFile
     hidden [string]$WorkDir
     hidden [string]$ScanDir
+    hidden [string]$ToolImage
 
-    Semgrep() {
+    Semgrep([object]$Settings) {
+        $this.ToolImage = '{0}:{1}@{2}' -f $Settings.Require('CONTAINERS.SEMGREP.NAME'), $Settings.Require('CONTAINERS.SEMGREP.VERSION'), $Settings.Require('CONTAINERS.SEMGREP.DIGEST')
         $this.WorkDir = (Get-Location).Path
         # Keep reports under the runner workdir so DinD can see the bind mount (not /tmp).
         $this.ScanDir = Join-Path $this.WorkDir 'artifacts/release-scan'
@@ -21,7 +23,7 @@ class Semgrep {
             -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 `
             -v "${mountRoot}:${mountRoot}" `
             -w $this.WorkDir `
-            semgrep/semgrep:1.96.0 `
+            $this.ToolImage `
             semgrep scan --config p/ci --json --output $this.ReportFile --metrics=off $this.WorkDir
         $exit = $LASTEXITCODE
         # Semgrep exits 1 when findings exist; still require a report.
@@ -42,8 +44,8 @@ class Semgrep {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAcsJEotrRM4hgq
-# 8V7/Ke8zKlsKinWuurVtN4+Zs/NzeqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCNREeXgABlOjLP
+# F8J14voFd2qL2lcgt+49Dy/30oqZ4KCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -64,17 +66,17 @@ class Semgrep {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIClj8NGV
-# 7smGcDXaH+HiCeQ36YPyejeg+cJCVw77JK/HMAsGCSqGSIb3DQEBAQSCAgBHHjNh
-# QEDZhRal0Se7CgcUuSCmMtlxXBGHRSofby7PNS9Za5CwV+ofmDIg4tnAD7QnXJAt
-# hqIxmzHDPJkGTgh06tbGfY/wnSo87A3z7IIckAjNSd627Zl3HxSoMx7XO3J+NK1r
-# MYGkQwvhYGkhSAEWm4bYdQoRdc0igjGthPI3had0rls16GC4FnDPfEyWMug0e4Xw
-# 4Y1iFCQVSvSoQhpE6Ia4mZ4/rmH/7+xonbhFS1Qmwus8C6bboZoAWIZKKWCQA12f
-# oJ33jknnG7HDHwtRfXnB+OwOAD1uKKrPCVi5SIYoCJmYy4pF80Fx7uHxRAXZ6qnO
-# 9o1lvFGGwQjKU2JCdI90Y1ebjxu9da0XElJDhR6yGmM8+wZKLjnJU6NEmDVpzAAS
-# +gNtcIRp+XO9c7q+fbx+i/NRkDUwxYDr0YAmHl7LoPj6h/LBjPaCbaSYh+U5mZxJ
-# f5zYfc+fpNjpPFaGBv2TiFXUzNFi1t6CG/wcR3BQmgEeo7BUDO2tuiftxLYlZnv4
-# fqgOKr//BwoXt+7yO62AvBZpW64bNIsMTHJpUwOyKIK8V//JydW0MbEFUJakIh9B
-# PzRm/b5HtdbByPrHimArUMhlliBnEM6fCLt5U0UHS/5NLrJmj+pzayWClqPzqJ+J
-# pS7LhXusDX75PSTPlbZBuwbKD9z9JgbGUulBJQ==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEINybQhRR
+# WRioh1//oUF3cx3EBmeSDZWep9pJOEDjI3cHMAsGCSqGSIb3DQEBAQSCAgCet3ir
+# z85tJXQgVlFnKLeTFxcisqx/SGTqbToQT90mbWCltQ872ZGQoIKZaefh12a6wgy/
+# rXoPASOjqJA07OQdVghI9Y52ONSWsjoo4qCCu4Wpvq3JzBhtBq0t/wL5u9SnMs25
+# EmUadAbAot2ja/pMIpFeuzm7v5T+FRGqj4b/zGxV9xBEk3DBvAL5smrUfRg5BsCi
+# gwvFNpVZzqFrHZdoQDG8V0fQ29X1ItF6QtRNL5mXMwHIlLtWaXIcpkbS2WcuBsEs
+# Dd4JqU7INMxUHIWSJGjulsLo3qGksd8hvJcozCDnf1lGRSPA74XQvGTlIMg2BRZi
+# oN4Qjdl0Q5K8c5tx6vp7dPkYLycWxvP/e4TdravjcM+mk4FePkl6UGWJTg2NhA4V
+# WRo4ZY9Nnto1B5GsF0tVNgHCBErN8aTWiZUAPGFcKNJTy/67jZ1jKPztPeVWphWu
+# rEUUTa4aNvpSg8WVc64JGhvYr5FTFd136z6eBp9PudE+eIjLKTD5StmxLumyLZKQ
+# 7icK+9VeMgZysflillwxmhtl44CwToN2Mm7vBmlpT6KqhCMgcbelbVYaFnQM6v9X
+# 3iItpCs1pGb59+Pr4a0C0/SCoypAmYJkj9T0vz6AOFKfmHbRi5EmHJ7xJs6ssY9E
+# 2tYaf3OVsCopTXMm976YL7g75sxbbCJB7XiJXQ==
 # SIG # End signature block

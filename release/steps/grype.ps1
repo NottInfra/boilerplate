@@ -1,19 +1,20 @@
 #!/usr/bin/env pwsh
 $ErrorActionPreference = 'Stop'
 
-. "$PSScriptRoot/../lib/ProjectConfigParse.ps1"
+. "$PSScriptRoot/../lib/Yaml.ps1"
 . "$PSScriptRoot/../lib/Grype.ps1"
 . "$PSScriptRoot/../lib/DefectDojo.ps1"
 . "$PSScriptRoot/../lib/OpenSearch.ps1"
-. "$PSScriptRoot/../lib/AlertMgr.ps1"
+. "$PSScriptRoot/../lib/AlertManager.ps1"
 
 $staging = $args[0]
 if (-not $staging) { throw '[!] staging required: live|test' }
 
-$project = [ProjectConfigParse]::new($staging)
-$os = [OpenSearch]::new($project.Name, $staging)
-$dojo = [DefectDojo]::new($project.Name)
-$scanner = [Grype]::new()
+$project = [Yaml]::new((Join-Path (Get-Location) 'project.cfg'))
+$settings = [Yaml]::new((Join-Path (Get-Location) 'settings.cfg'))
+$os = [OpenSearch]::new($settings, $project, $staging)
+$dojo = [DefectDojo]::new($settings, $project)
+$scanner = [Grype]::new($settings)
 
 $os.Step('grype', 'started')
 $report = $null
@@ -40,7 +41,7 @@ if ($scanner.FindingCount -gt 0) {
             if ([string]$match.vulnerability.severity -match '^(?i)(critical|high)$') { $severity = 'critical'; break }
         }
     }
-    [AlertMgr]::new().Alert("grype found $($scanner.FindingCount) finding(s)", $severity)
+    [AlertManager]::new($settings, $project).Alert("grype found $($scanner.FindingCount) finding(s)", $severity)
 }
 if ($err) {
     $os.Step('grype', 'failed', @{ error = $err.Exception.Message; finding_count = $scanner.FindingCount })
@@ -51,8 +52,8 @@ $os.Step('grype', 'succeeded', @{ finding_count = $scanner.FindingCount })
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCChh7SOOKV/cHc2
-# Xu5kYa6knPdxEhNwZ7RkzrTVQkKKr6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAGmIOSbvQoRqoo
+# dbQahXzaOFwZ+pF5I8fbnEfUgxao06CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -73,17 +74,17 @@ $os.Step('grype', 'succeeded', @{ finding_count = $scanner.FindingCount })
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEINtCxSDg
-# ggbu0NNLYQFshPBDxhGUxeYUinHLumj+4SlcMAsGCSqGSIb3DQEBAQSCAgChRQcB
-# mVIKyr/jFe8kd7kJy1sB6mYfkiZ/WX32M7CaEwTwz5M7g3VMp1utRCVgPIaujBa9
-# BQUjg05CyaPJHuSi9V7TtDuVMOYOepfy3ueKbgt0JVsoZzXXtge3CUjInfrhFd2U
-# rgIeT0ZiyrkhxSviZNDtRW/PWDg0DTscwwl/j0wIqCwzq0xEDRER9wexifHUw+D7
-# p/yX8aAhmP9RbsI1FpkXgb22FIdu/ch2mjJ/5UqMpuU8LMvUMInZhx3gp7a+KZSf
-# RgY5LyrTTD16I/04qmgY8nKm2OsE3VremJXuiVQW76Zcp+qS8Kw4J05LZ2n71uAt
-# VDC1JGpPSlUrSC2GFRlVdv/SQmPwqrTZrKGZfP5IzQsomnVK/LdfHq+aEFTgiJ7u
-# 499oSr6z6I7Wpu03qVBiVD8DIqh4ofXcmbmu1pVI/AZURl20HwiRraDrjOC/H4zc
-# I5V7SgiirqXHxwK6lLk8avQiOw6IahjPfebt7yodBB0i4eankPnjcRV8dxsEy1TG
-# XhxrJuPCEm8IuK6wQX1voFsI+lI6xBEZFHgQCreBiUnmRWRqJmRRTemEw2g85cuk
-# DiAsfCNvSEe4Sj0+qGVQzzQlMiFnZ87T1P9BHj5V2V7N2s/2wKsYFzhFflmBsB0s
-# PxKuFEG0n8L0jaa1c9U5GrBHoe/yrCR5P1Fn6w==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIADHaC7D
+# ZT4924NzevTUhg6Zq5DnLJ5GW0V4fgFC1yDTMAsGCSqGSIb3DQEBAQSCAgBF6wWW
+# WatD5dyscGjs2Zn6d4S9EipHX5OFO4YN3/yOqw2tmsDY9TgFc1WR/2c+ALc/H+es
+# RV4H1zZj2MqXmXJy+MXkRdai4SbPB/02Jcpja/rIxkOiS4T1HvqrLLfyZiOFyNcz
+# 2kzczTIuxc/CQoaDdKDQIIYOCpBnT4bn/xL4VFBhcKETPekBCx14aMuOzeb1VdSS
+# 9zo6+i0USBMYjNRGydwGDJCx1X5ntZp/ITk+1+Er4AwhQ3pzxNJLYm6zPJalVnpU
+# jOalGTtXX3hwMG/gWsJ1Rt3nbfM47pVKdTvxX0yEiew5qj/W3+7hGkDbghZkZhfL
+# iFp7bR9WZKVHzmL/95P5cO3o9h42j0ndmkq4b26EWVZZ40S0fYD4dRHNelbkRPkW
+# ghXgTx8CNf1NwFotvmt9lbgvWcwu2PMqR5kwMk2krL34e+Z7Eej8bkAZVlJV1hm2
+# Nkd61KVDFB5FqM7D1G+oR+Upo5aFGK1lE0BfeXxSk4yAvRf0slqQQSKqEBho5cfy
+# I9C3vPoCRCQUTxU2rS0yIxIjzNrp+ZF/EblDEWcbArFaIvLYql2gbxOH8YuaNZmp
+# krRcX8U2FFzxOK0LoakAxwejhcNGgnjDqQk1riwq/C7QrlXCD1+4puF4qkvLeuSF
+# men6Od/RAoqAdyeEtrlYruToPdxxhVIQW0Z74w==
 # SIG # End signature block

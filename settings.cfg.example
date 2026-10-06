@@ -1,74 +1,110 @@
-# Signed config. settings.cfg.sig must match this file (TUF CMS).
+# Copy to settings.cfg (gitignored; must be TUF-signed as settings.cfg.sig).
 # Non-secret config only — secrets live in .env* / Vault.
-# NETWORK=cluster|public selects ENDPOINTS.<SERVICE>.CLUSTER|PUBLIC → env as <SERVICE>_URL.
+# NETWORK=cluster|public selects ONPREM.ENDPOINTS.<SERVICE>.<CLUSTER|PUBLIC> → env as <SERVICE>_URL.
+# CLOUDFLARE is managed-only. API token lives in .env.shared. Object storage is MinIO.
 
-SIGSTORE:
-  OIDC_REDIRECT_URL:
+LOCAL:
+  SIGSTORE:
+    OIDC_REDIRECT_URL:
+  GOOGLE:
+    OAUTH_REDIRECT_URL:
 
-GOOGLE:
-  OAUTH_REDIRECT_URL:
+ONPREM:
+  ENDPOINTS:
+    ALERTMANAGER:
+      CLUSTER:
+      PUBLIC:
+    CTLOG:
+      CLUSTER:
+      PUBLIC:
+    DB:
+      CLUSTER:
+      PUBLIC:
+    DEFECTDOJO:
+      CLUSTER:
+      PUBLIC:
+    FULCIO:
+      CLUSTER:
+      PUBLIC:
+    GITLAB:
+      CLUSTER:
+      PUBLIC:
+    GRAFANA:
+      CLUSTER:
+      PUBLIC:
+    GROWTHBOOK:
+      CLUSTER:
+      PUBLIC:
+    KEYCLOAK:
+      CLUSTER:
+      PUBLIC:
+    MATOMO:
+      CLUSTER:
+      PUBLIC:
+    MINIO:
+      CLUSTER:
+      PUBLIC:
+    OPENREPLAY:
+      CLUSTER:
+      PUBLIC:
+    OPENSEARCH:
+      CLUSTER:
+      PUBLIC:
+    OPENSEARCH_DASHBOARDS:
+      CLUSTER:
+      PUBLIC:
+    OTEL:
+      CLUSTER:
+      PUBLIC:
+    RABBITMQ:
+      CLUSTER:
+      PUBLIC:
+    REDIS:
+      CLUSTER:
+      PUBLIC:
+    REGISTRY:
+      CLUSTER:
+      PUBLIC:
+    REKOR:
+      CLUSTER:
+      PUBLIC:
+    SONAR:
+      CLUSTER:
+      PUBLIC:
+    TUF:
+      CLUSTER:
+      PUBLIC:
+    VAULT:
+      CLUSTER:
+      PUBLIC:
 
-ENDPOINTS:
-  ALERTMANAGER:
-    CLUSTER:
-    PUBLIC:
-  CTLOG:
-    CLUSTER:
-    PUBLIC:
-  DB:
-    CLUSTER:
-    PUBLIC:
-  DEFECTDOJO:
-    CLUSTER:
-    PUBLIC:
-  FULCIO:
-    CLUSTER:
-    PUBLIC:
-  GITLAB:
-    CLUSTER:
-    PUBLIC:
-  GRAFANA:
-    CLUSTER:
-    PUBLIC:
-  GROWTHBOOK:
-    CLUSTER:
-    PUBLIC:
-  KEYCLOAK:
-    CLUSTER:
-    PUBLIC:
-  MATOMO:
-    CLUSTER:
-    PUBLIC:
-  MINIO:
-    CLUSTER:
-    PUBLIC:
-  OPENREPLAY:
-    CLUSTER:
-    PUBLIC:
-  OPENSEARCH:
-    CLUSTER:
-    PUBLIC:
-  OPENSEARCH_DASHBOARDS:
-    CLUSTER:
-    PUBLIC:
-  OTEL:
-    CLUSTER:
-    PUBLIC:
-  RABBITMQ:
-    CLUSTER:
-    PUBLIC:
-  REDIS:
-    CLUSTER:
-    PUBLIC:
-  REKOR:
-    CLUSTER:
-    PUBLIC:
+MANAGED:
+  CLOUDFLARE:
+    ACCOUNT_ID:
+    API:
+
+CONTAINERS:
+  GITLEAKS:
+    NAME:
+    VERSION:
+    DIGEST:
+  SEMGREP:
+    NAME:
+    VERSION:
+    DIGEST:
   SONAR:
-    CLUSTER:
-    PUBLIC:
-  TUF:
-    CLUSTER:
-    PUBLIC:
-  VAULT:
-    CLUSTER:
-    PUBLIC:
+    NAME:
+    VERSION:
+    DIGEST:
+  SYFT:
+    NAME:
+    VERSION:
+    DIGEST:
+  GRYPE:
+    NAME:
+    VERSION:
+    DIGEST:
+  TRIVY:
+    NAME:
+    VERSION:
+    DIGEST:

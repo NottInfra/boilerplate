@@ -1,10 +1,10 @@
 class GA4 {
-    [Config]$Project
+    [Yaml]$Project
     [string]$AccountId
     [Google]$Google
 
-    GA4([Config]$Project, [Google]$Google) {
-        if (-not $Project -or -not $Project.Loaded) { throw '[!] GA4 requires project.cfg' }
+    GA4([Yaml]$Project, [Google]$Google) {
+        if (-not $Project) { throw '[!] GA4 requires project.cfg' }
         if (-not $Google) { throw '[!] GA4 requires Google' }
         $this.Project = $Project
         $this.Google = $Google
@@ -14,18 +14,18 @@ class GA4 {
     hidden [string] FindOrProvisionAccount() {
         $matches = $this.FindAccountIds()
         if ($matches.Count -gt 1) {
-            Write-Host "[!] Found $($matches.Count) GA4 accounts named '$($this.Project.Name)' — using $($matches[0]), delete the extras in Admin UI"
+            Write-Host "[!] Found $($matches.Count) GA4 accounts named '$($this.Project.Require('project'))' — using $($matches[0]), delete the extras in Admin UI"
         }
         if ($matches.Count -ge 1) {
-            Write-Host "[+] GA4 account: $($this.Project.Name) (accounts/$($matches[0]))"
+            Write-Host "[+] GA4 account: $($this.Project.Require('project')) (accounts/$($matches[0]))"
             return [string]$matches[0]
         }
 
-        Write-Host "[+] GA4 account '$($this.Project.Name)' not found — requesting provision ticket"
+        Write-Host "[+] GA4 account '$($this.Project.Require('project'))' not found — requesting provision ticket"
         $headers = $this.Google.AuthHeaders()
         $body = (@{
                 account     = @{
-                    displayName = $this.Project.Name
+                    displayName = $this.Project.Require('project')
                     regionCode  = 'GB'
                 }
                 redirectUri = 'https://analytics.google.com/'
@@ -34,25 +34,25 @@ class GA4 {
             $ticket = Invoke-RestMethod -Method Post -Uri 'https://analyticsadmin.googleapis.com/v1beta/accounts:provisionAccountTicket' -Headers $headers -Body $body
         }
         catch {
-            throw "[!] GA4 cannot create account '$($this.Project.Name)': $($_.Exception.Message)"
+            throw "[!] GA4 cannot create account '$($this.Project.Require('project'))': $($_.Exception.Message)"
         }
 
         $url = "https://analytics.google.com/analytics/web/?provisioningSignup=false#/termsofservice/$($ticket.accountTicketId)"
         Write-Host "[!] Accept GA4 ToS: $url"
         if (Get-Command open -ErrorAction SilentlyContinue) { & open $url }
 
-        Write-Host "[+] Waiting for GA4 account '$($this.Project.Name)' (poll every 5s, up to 15m)..."
+        Write-Host "[+] Waiting for GA4 account '$($this.Project.Require('project'))' (poll every 5s, up to 15m)..."
         $deadline = (Get-Date).AddMinutes(15)
         while ((Get-Date) -lt $deadline) {
             Start-Sleep -Seconds 5
             $matches = $this.FindAccountIds()
             if ($matches.Count -ge 1) {
-                Write-Host "[+] GA4 account: $($this.Project.Name) (accounts/$($matches[0]))"
+                Write-Host "[+] GA4 account: $($this.Project.Require('project')) (accounts/$($matches[0]))"
                 return [string]$matches[0]
             }
-            Write-Host "[=] waiting for account '$($this.Project.Name)'..."
+            Write-Host "[=] waiting for account '$($this.Project.Require('project'))'..."
         }
-        throw "[!] Timed out waiting for GA4 account '$($this.Project.Name)' after ToS"
+        throw "[!] Timed out waiting for GA4 account '$($this.Project.Require('project'))' after ToS"
     }
 
     hidden [string[]] FindAccountIds() {
@@ -66,7 +66,7 @@ class GA4 {
             $summaries = @()
             if ($null -ne $r.accountSummaries) { $summaries = @($r.accountSummaries) }
             foreach ($summary in $summaries) {
-                if ($summary.displayName -eq $this.Project.Name -and $summary.account) {
+                if ($summary.displayName -eq $this.Project.Require('project') -and $summary.account) {
                     $id = ($summary.account -replace '^accounts/', '')
                     if ($id) { $found.Add($id) }
                 }
@@ -150,10 +150,10 @@ class GA4 {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD+tteNIJqNgZIl
-# pPJ/hyrurn1UFOVnu8a3n0nN6EV/QKCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCIodeZzS0bukFQ
+# X9Ql2FL0y8/gnIvUZMfNHhU/GMN5OaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -171,20 +171,21 @@ class GA4 {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEILUon883
-# gVGah0Uamwr/2hHRuNOiosbbmdR8SswlmeEvMAsGCSqGSIb3DQEBAQSCAgBEiyAX
-# ezjc2bOo4HIbLLiIArOcm48Zwou0AxqV/iCAd3WbRJ6DIz7DXioIXLwyPqRQ2dZx
-# fzsnkMX93VBKRmh1y9mnFAUBYZtYdBNgzv2g38V+i1xY9scARLJFdWoGEd1/3P/r
-# 6R7CLiASKCAwvzRyWHDOEa7nAJolEzx0pnTiW2smnjN4pXlxCVkewvpOGTE4gFdF
-# ak08ZyIoQvUplRobvPnztCfjVo4OHXA1s83kPk8T2weG/pQT4x4K9hM9zzr01oXm
-# 8LhaLwFnFOuAReNSsFV2uElkEFzZwXd9XzhjcyTfzzvQDuhseWcH9n3PDHkqMK2B
-# K0fleaizsbyELsOnuhKup+pOf/mHQ7fPTDdPrxtwl6ZMK9W+x9+KoSaTbiojnAwH
-# XuUB7mEGFHBt7EvmIAxh5dVgXYOoMcv4vvGjsGFttqzNDK/qLaMQ/drqqFWir0Zl
-# VJkmyjrcPAA21vtp46KLqmewr+mq21o7ZEHI28zHu0QhyO5GGDeJp3AZsl7Bbocg
-# xeQq/+CmRY4mU/PRcUnA/KXMUXmu4482GtLjpFGGajLUquCzugoIuE0j/TS+Cgsu
-# upFx9EPV0hzJbkmOWqD9YYBb6HqWP0F+Oseg7TvtHP1aFEyfNeW6jGbm5C9hSEIh
-# jK5R8d7GrGBbGejGY5ThTXhkATxOjv2nXPAWWw==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIMKPoIOA
+# 6amMcd3iC64numoGZbOIaUjhOV8hkjOiAPWqMAsGCSqGSIb3DQEBAQSCAgBvvpYO
+# NMBFPJCrGOsJCwVKtD5EzmixpsaAIKYiPVq4XrbOOIR8rJFsgET5+GDtVrTz6Hoq
+# DvGFVryAjIkag8iyUG8WjhY3erPDYc18wZDgwnhSAck7xKgVwg6GCFFFEcOmOlT1
+# BXKR7K04yIA03tGcJ2J2pKMCDRCvFPboGIJBMOsWX0D2+keJsvUtWsrY0OPk08Wg
+# JxJLyQcVt8VzcSqwzfA6RX1/JKdsmTDlvyHKTvnM/nlvf3KSGmxGKmziaTcEF4kd
+# htSmEOyQ3tNGwAdI4cHeMbjoEfM3vjVu/kTNUpNhDXEDqlyn1OzFC0IbPnf9em+2
+# ChTE4IdFncz26FdYbdGsOdRpctv23O7I2O4jIOPsqvAJ7QMFuvmeoAmsqgF1PWNQ
+# f5aXWEJNdkOEuVedrT88xuKdyh82L94tNsWUGaiS18ZLTNkZMmbNfq9N3jjwo2QF
+# ukvUxcByoXiiZfkHmbP4G8+dR7HLOsRPanu3oZs6sjlSPq6Z/Lgu6waAJIvX5eNf
+# 0nfiEM4fP8cO+Adpqr3ECe9L8E85hhCHHxQX/0nS/ShaJUTh7WQ9S+XT8281mmfU
+# FRMmX7CDs3eBM1jdvp9YZaz08cwSSmiDLNLUqyYm5e1vL5YkcRzh19WsbC77Xf4x
+# W73Ze0hwji3e3xFfVwUgxQ8xUaXsJ0uLqEpd+qErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

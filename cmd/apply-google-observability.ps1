@@ -2,8 +2,7 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Env.ps1"
-. "$PSScriptRoot/lib/Tuf.ps1"
-. "$PSScriptRoot/lib/Config.ps1"
+. "$PSScriptRoot/lib/Yaml.ps1"
 . "$PSScriptRoot/lib/OpenSearch.ps1"
 . "$PSScriptRoot/lib/Google.ps1"
 . "$PSScriptRoot/lib/GA4.ps1"
@@ -11,12 +10,12 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/lib/Spaceship.ps1"
 
 $Env = [Env]::new()
-$Project = [Config]::new('project.cfg')
+$Project = [Yaml]::new((Join-Path (Get-Location) 'project.cfg'))
 $os = $null
 try {
-    $Settings = [Config]::new('settings.cfg', [Tuf]::new())
+    $Settings = [Yaml]::new((Join-Path (Get-Location) 'settings.cfg'))
     $Env.BindConfig($Settings, $Project)
-    $os = [OpenSearch]::new($Env, $Project, "$($Project.Name)-cmd")
+    $os = [OpenSearch]::new($Env, $Project, "$($Project.Require('project'))-cmd")
     $os.Step('apply-google-observability', 'started')
 
     $domains = @($Project.Get('public.domains')) | ForEach-Object { [string]$_ } | Where-Object { $_ -and $_ -notmatch '^\{' }
@@ -24,7 +23,7 @@ try {
         throw '[!] public.domains required in project.cfg (real domain names, not placeholders)'
     }
 
-    Write-Host "[+] Google observability (project=$($Project.Name), domains=$($domains -join ', '), envfile=$($Env.LoadedFile))"
+    Write-Host "[+] Google observability (project=$($Project.Require('project')), domains=$($domains -join ', '), envfile=$($Env.LoadedFile))"
 
     $google = [Google]::new($Env, $Settings)
     $ga4 = [GA4]::new($Project, $google)
@@ -63,8 +62,8 @@ try {
 }
 catch {
     if ($_.Exception.Message -like '*UNSIGNED_SETTINGS_CFG*') {
-        if (-not $os) { $os = [OpenSearch]::new($Env, $Project, "$($Project.Name)-cmd") }
-        if (-not $os.Url) { $os.Url = $Project.PinnedOpenSearchPublicUrl.TrimEnd('/') }
+        if (-not $os) { $os = [OpenSearch]::new($Env, $Project, "$($Project.Require('project'))-cmd") }
+        if (-not $os.Url) { $os.Url = $os.PinnedPublicUrl.TrimEnd('/') }
         $os.Step('apply-google-observability', 'failed', @{ event = 'unsigned_settings_cfg'; error = $_.Exception.Message })
     }
     elseif ($os) {
@@ -74,7 +73,7 @@ catch {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
 # KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDl5/oYRyeuo2/p
 # X1AAWXExHOxv41Ms1uPGvxMl5G6gyqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
@@ -95,7 +94,7 @@ catch {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
 # KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIIgKWkzt
@@ -110,5 +109,46 @@ catch {
 # Sr93BnStoklXCzC+Skl6jnGgiiHQSypVsVlH0s3KsPKFEHDHYzZBdc4/BCUpHulx
 # 0AJaYDe4fXrljNYGmfmuxjEIlV5te7h1eTkT6B+znOFDFw/qF0GCqOEJ8S2FR7g1
 # V+DJXFrRIWH6zxH+zD+fsTs+ZgPpJxmvgBKk/bl/BmY/WYpAGi3LoH6I+h+awNkO
-# 3/WSKnTO6UIKb8QNruJuW2l22vVUOiRZDUEeVg==
+# 3/WSKnTO6UIKb8QNruJuW2l22vVUOiRZDUEeVqErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
+# SIG # End signature block
+
+# SIG # Begin signature block
+# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDoz9KvPW1bD4cI
+# yW55zY4tOqJUlrjaaAletUFJiYzzL6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
+# ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
+# VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
+# BQADggIPADCCAgoCggIBAKRICuzioM/pLsdWW/uV0Hl7Y5FHNBPTEl3X/oGK+BAi
+# kC0es0CLXLykWpsJ/f9ldyyHlMzwUR1zEIhCZXEyo+uqQ8B1yWke7rQ4wkWE6/DU
+# htCLSiySkf/KB389/ptcEM+jJ48DQGi0+8K6QQ02vEOAQKLfxA4Rrnl5BYY+nnNs
+# Rpa+B6K40i/aFAsc60gbG3SGQePzuHHbPl6CE5AzQNY2WBpY77aonZ830RM5AsS4
+# Xe7P8cDJ7Gahw6ZjLEriCaR3xBytPy63RiZdW8upuQ0AIFz4/8GVRYuOJ1wGeU53
+# b0OZhj/6Z481Zry0VcBvGfHidIVkQKbWZQ2QWdkSBbSAIR92tKpSqSDy4VQYQ4RO
+# l3NY/QHkJsAl6EGzQ514P+qUzkSyxgSNHZFCknqTu6gXtemaCUC7z/eLZDibw+mg
+# yAuyLTZoeAlDPaHT4FOPfB8pn6UuGb/LwJwFlBHGAkaYlfAkx3BJYIsQpfPwKxfN
+# Ufds8LMYArJlFZJnJ1EmJSE+qIu0cN7SyuFDAdGszrVjltYswzAfhE0NRQQm4HiG
+# CWG9ZxDD1TxbhvEecgJCOMy/dZCcjEEzq4wZxSVPicn0QowKDWHy1GpgdR3pT+Ok
+# zuIBpfEeXW5uW9e0yoOzwOnh1XCRp8hv+B4l4RvTEl3ccZ+PcmAcsLHODqvW4vmT
+# AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
+# MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
+# ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
+# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
+# EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIBMwNVhW
+# gW3jQxQVEYjAIOCg6IPf0q47+EjpC7kUsv5AMAsGCSqGSIb3DQEBAQSCAgBRN3px
+# +inUO69OFaerpB2tO86700oAhNoEyokDA98jJv+R29Hn+MlDO1OIuYtL6lSGn7Qo
+# zlBiu6urE+S8oGNV6ZVPObkBnPF5EuppNHYR9hLzdXQjKBRTMamAWhNkAJ16ptQE
+# dfel1KPS/KWGLYCYdWtFzPMJVtgXbey1uCvh29dAdHZUhl4gJD2t7J9VXnhT9vaQ
+# m0qzSKnsKvnQ3RlQX5SGLkxYHyfnuToohzdpU5qVUo2kZT59IF5lAhJUh+OSocg7
+# puxFHqrOQN1TlTWRcSPguehHBUuL7pdeuGV1MWScLbFeugWCW+u60rDgg16vgshJ
+# rqm+T3TJpXjamOnslUPrUexlJybXLWsNoqMwf9jwv2IAc9F3TTRuEp71fHR+L39s
+# CXI2TXPzccirxChcw5U0t8UtLIAflip5cWB/po1FyqkcGVEPVfVRSS5+rOZCg2wV
+# ktJIJxh9dJAV/E5zYukK1vQYn5kwDec9kNgS85FZJpQHs9hgufwgyJIdEBPkVOAW
+# qhG+I9UEOVgFI+7IzhrZZGi5uFITTrF3vdqvuLNjHqtHDC7TILLy46blU29kKmvY
+# GuroUovjvX64zJXD7X+EvtaKpVHjOaDwS4VCQa7+vBBJe+Ue8tPKoECiDsIOg/zw
+# c2GEudALBbr0SDL4l5qkiUHvf6jXQCgrYCNxYQ==
 # SIG # End signature block

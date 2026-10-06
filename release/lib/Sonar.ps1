@@ -6,43 +6,30 @@ class Sonar {
     hidden [string]$WorkDir
     hidden [bool]$Gated
     hidden [string]$BaseBranch
-    hidden [string]$Image = 'sonarsource/sonar-scanner-cli:latest'
+    hidden [string]$Image
     [int]$FindingCount
     [string]$FindingSummary
 
-    Sonar([string]$Name, [string]$Root, [bool]$Gated, [string]$BaseBranch) {
+    Sonar([object]$Settings, [object]$Project, [string]$Env) {
+        if ($Env -notin @('live', 'test')) { throw '[!] env required: live|test' }
         if (-not $env:SONAR_TOKEN) { throw '[!] SONAR_TOKEN is required' }
-        if (-not $env:SONAR_URL) { throw '[!] SONAR_URL is required' }
-        $this.Name = $Name
-        $this.Root = $Root
+        $this.Name = $Project.Require('project')
+        $this.Root = (Get-Location).Path
         $this.Token = $env:SONAR_TOKEN
-        $this.Url = $env:SONAR_URL
-        try {
-            $null = [System.Net.Dns]::GetHostAddresses('sonarqube.sonarqube.svc.cluster.local')
-            $this.Url = 'http://sonarqube.sonarqube.svc.cluster.local:9000'
-        }
-        catch { }
-        $this.WorkDir = (Resolve-Path $Root).Path
-        $this.Gated = $Gated
-        $this.BaseBranch = $BaseBranch
+        $inCluster = "$env:NETWORK" -eq 'cluster' -or "$env:GITHUB_ACTIONS" -eq 'true'
+        $which = if ($inCluster) { 'CLUSTER' } else { 'PUBLIC' }
+        $this.Url = ([string]$Settings.Require("ONPREM.ENDPOINTS.SONAR.$which")).TrimEnd('/')
+        $this.WorkDir = (Resolve-Path $this.Root).Path
+        $this.Gated = $env:RELEASE_PIPELINE -eq 'gated'
+        $branch = [string]$Project.Get("remotes.$Env.branch")
+        if ([string]::IsNullOrWhiteSpace($branch)) { $branch = 'develop' }
+        $this.BaseBranch = $branch
+        $this.Image = '{0}:{1}@{2}' -f $Settings.Require('CONTAINERS.SONAR.NAME'), $Settings.Require('CONTAINERS.SONAR.VERSION'), $Settings.Require('CONTAINERS.SONAR.DIGEST')
     }
 
     hidden [string[]] ScannerArgs() {
-        $args = @("-Dsonar.projectKey=$($this.Name)")
-        if (-not $this.Gated) { return $args }
-
-        $branch = if ($env:CI_COMMIT_REF_NAME) { $env:CI_COMMIT_REF_NAME } else {
-            & git -C $this.Root rev-parse --abbrev-ref HEAD 2>$null | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw '[!] cannot resolve current branch for sonar pull request analysis' }
-            (& git -C $this.Root rev-parse --abbrev-ref HEAD).Trim()
-        }
-        $key = if ($env:CI_MERGE_REQUEST_IID) { $env:CI_MERGE_REQUEST_IID } else { $branch }
-        $base = if ($env:CI_MERGE_REQUEST_TARGET_BRANCH_NAME) { $env:CI_MERGE_REQUEST_TARGET_BRANCH_NAME } else { $this.BaseBranch }
-
-        $args += "-Dsonar.pullrequest.key=$key"
-        $args += "-Dsonar.pullrequest.branch=$branch"
-        $args += "-Dsonar.pullrequest.base=$base"
-        return $args
+        # Community Build rejects sonar.pullrequest.* (Developer Edition only).
+        return @("-Dsonar.projectKey=$($this.Name)")
     }
 
     [void] Scan() {
@@ -85,6 +72,7 @@ class Sonar {
         $status = [string]$gate.projectStatus.status
         if ($status -eq 'OK' -or $status -eq 'NONE' -or [string]::IsNullOrWhiteSpace($status)) {
             $this.FindingSummary = ''
+            $this.FindingCount = 0
             return
         }
         $bits = @()
@@ -97,10 +85,10 @@ class Sonar {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBbupc3pM9U9Gma
-# X8waHuiRxma8vStEyICpR+8fgG2J4qCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCASZmuo1rtGyVR0
+# SF15u6tQjjFnf1lTBmCJsAe6PMYfIqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -118,20 +106,21 @@ class Sonar {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIN2ElNTh
-# Z1dr6/YVazsJcA218izkjtirOB5AY0QD8b+/MAsGCSqGSIb3DQEBAQSCAgChXqyR
-# x6vudK1ZiDPFWadYAnQUiSHaG8frwV7anTQbjWAZkI3Nc47SP6Bqe68cHSYaPjV1
-# C0gZPVdxSRgaaIUlXoeXSq7flea17Yny6Zh8Ek2rYQMfLZiyT4ZjhdSyKjHHATOI
-# 8wMsmnMAiAiBJci3Opu47tXlAwZbOTwBVdrD2rJDeZAKRINg2rL8jEcy8VOUKUdP
-# 1fGzPwW1Or4khGvpx93tJq0YDToqG/B6QpIwE4IKSTuB741inNzrNSywo+TyQAhb
-# u7Q/db3WccuYZA1g7+MzgZ5/7wbcLWYeTh4k8AgRcW79GsLSH9KbtfXxbd/zrYPt
-# F/GlxMnmxjFQgq97BsUUgGzW+fWfeVq7Q13zhL3O0txtk6697992f95k4MAfwaYZ
-# Su/ehcB0kcWylZWoXKPTFaZtfAtdkgiGkLWDZgqUVClNu6364UvWFOqrlFYkeZ6X
-# VViLyCmmTdGGprT1rRCVJVWeEyYPbQL9CbAoi9twuHFWARDtFfjB3eeQ1vyHTBMt
-# 6iCvxIlTa9DbPPe8eeNlYWAy6LvsHc1otnKkTgRGuhlgsRyQGyQxcGv3mW2AQh4B
-# hEkxhhm3dz8MkX86oK/DS1QeJ2EoJ2Syihaj/hi+1vvzVseW1EBye+M4KgzU6DSv
-# tQ3mOM2kQgdL90mAQnws8hbt/mL1/5S4ZOvyfw==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIAr2zFIk
+# +GELG2DJ7zhkTFO6ijpRsN9cS5GTATe8UXfNMAsGCSqGSIb3DQEBAQSCAgCQMAvF
+# 0BFIpvIi7YQnNLhZdshdcv5jBRzphkHhNGQ8SyT7eI3vkpetjOX1zWw+Zg5W9KQx
+# ZmzPssB51bboFIw06aTpp9nIiuD8ST0Erk5ZjPyFjfL/vYIky+p27/NPSbX7giF9
+# OT83S8ocicVLFW6BGvRYu9RCkOfF1EDI+Xe2UjJDpfmu/yfNjJsFTNLdp+g/+5dz
+# bFwws4oIzcu1o+mpAEJ8QsN9BKYRaieMOVdm2YApN5admjm4nhczAdhJm3p2GWi1
+# OCtIVirSK6eI/LjgJKUSJtTLEM94HEDF9s4PByoC0AEvX5MpsGg141sQJmOpjJfS
+# l0y4FdbhmRZ/G7vk7H6Yr5BLqnWAGplxGxoShRkulOy/riBynGGviEvyDkrqC7ot
+# RGhJj89Ho8lbeDN1SsvTOGj0o9XunYntDCjamO9YIRVMk8kU1y99HApzXagYMAD9
+# p4T96YutyZdeEveT9wVrlBt+f4L6nTEgJcML3rVj5e99pvRkR5oGEizujZhgEOOP
+# pcZ7vRlU7qWezLaxBZEznCaBsf12rBwfYbiRKcHEhJWTQlJbqZqtslEcz6hOkjQV
+# uf7JkGHT6usJX8TzqcRmoxCq/DFbfy/4jiHIWwE11b5kB/mDrTWw8j3ExsZi528j
+# elurm+EgN7eXstLlbpMrtNi6s2JVGZhjgnHU36ErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

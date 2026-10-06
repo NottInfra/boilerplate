@@ -4,7 +4,7 @@
 
 Env template: [`.env.example`](../../.env.example) → `.env.development` / `.env.test` / `.env.live`, plus [`.env.shared.example`](../../.env.shared.example) → `.env.shared` (always loaded by `cmd/lib/Env.ps1`).
 
-Service hosts live in [`settings.cfg`](../../settings.cfg) under `ENDPOINTS.<SERVICE>.<CLUSTER|PUBLIC>`. After env is chosen, cmd asks for `NETWORK` (`cluster`|`public`) and injects the matching URLs into process env (`OPENSEARCH_URL`, `REDIS_URL`, …). `DB_URL` is built by `PostgreSql` from `ENDPOINTS.DB` + `DB_USER` / `DB_PASSWORD` + `{project}-{ENV}`. `apply-env` merges the selected network’s URLs into Vault.
+Service hosts live in [`settings.cfg`](../../settings.cfg) under `ONPREM.ENDPOINTS.<SERVICE>.<CLUSTER|PUBLIC>`. After env is chosen, cmd asks for `NETWORK` (`cluster`|`public`) and injects the matching URLs into process env (`OPENSEARCH_URL`, `REDIS_URL`, …). `DB_URL` is built by `PostgreSql` from `ONPREM.ENDPOINTS.DB` + `DB_USER` / `DB_PASSWORD` + `{project}-{ENV}`. `apply-env` merges the selected network’s URLs into Vault. `LOCAL` holds Sigstore and Google. `MANAGED.CLOUDFLARE` holds the account id and API. CDN objects live on MinIO.
 
 ## Apply scripts (`/cmd`)
 
@@ -16,11 +16,12 @@ Service hosts live in [`settings.cfg`](../../settings.cfg) under `ENDPOINTS.<SER
 | `apply-env.ps1` | Push env files → Vault |
 | `apply-commit.ps1` | Commit + push to live/test remotes |
 | `apply-dns.ps1` | Apply `public.dns.*` A (+ per-site TXT) via Spaceship |
+| `apply-cdn.ps1` | `cdn.<domain>` A record via `apply-dns`, Cloudflare hostname → MinIO, public MinIO bucket; optional `assets/cdn` publish |
 | `apply-google-observability.ps1` | GA4 account/properties + Search Console DNS verify |
 | `apply-synth-monitoring.ps1` | Push HTTPS probe targets → `NottInfra/blackbox-targets` (`https/<project>.json`) |
 | `refresh-boilerplate.ps1` | Soft-pull boilerplate updates |
 
-Orchestrators construct `$Env` / `$Project` / `$Settings`, then `$Env.BindConfig($Settings, $Project)` so endpoint URLs are in process env. Libs keep using `$Env.Require('…_URL')`.
+Orchestrators construct `$Env`, then `[Yaml]::new` for `project.cfg` and `settings.cfg` (`cmd/lib/Yaml.ps1`, same shape as `release/lib/Yaml.ps1`), and inject those into libs. `$Env.BindConfig($Settings, $Project)` copies `ONPREM.ENDPOINTS` for the selected network into process env. Libs keep using `$Env.Require('…_URL')` or `$Settings.Require('…')`.
 
 ## Release pipeline (`/release`)
 

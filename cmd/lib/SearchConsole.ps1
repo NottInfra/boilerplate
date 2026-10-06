@@ -1,9 +1,9 @@
 class SearchConsole {
-    [Config]$Project
+    [Yaml]$Project
     [Google]$Google
 
-    SearchConsole([Config]$Project, [Google]$Google) {
-        if (-not $Project -or -not $Project.Loaded) { throw '[!] SearchConsole requires loaded project.cfg' }
+    SearchConsole([Yaml]$Project, [Google]$Google) {
+        if (-not $Project) { throw '[!] SearchConsole requires project.cfg' }
         if (-not $Google) { throw '[!] SearchConsole requires Google' }
         $this.Project = $Project
         $this.Google = $Google
@@ -90,10 +90,10 @@ class SearchConsole {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDjfML9bLxciaTa
-# QwTfuEyc6xOTYsyPUs4AfWNSwJ8KpqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDPE+mqsCWXGX6c
+# vYiMoHmMKCOmjLEmA0HH9rBb9FA7caCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -111,20 +111,21 @@ class SearchConsole {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIETopzqd
-# Mu6kwhj3WqAtGHdYO0xC+A8lzMHpRtmJbwQXMAsGCSqGSIb3DQEBAQSCAgBsr1Io
-# GRnaSgEA8D1jccxrntHw3Ducm/diSFyiPKH3042wgLAMA73qmw1fg+oITOFSRaRe
-# Gd/KR1khkPtFJLdmazW5TKCWEId6chI/pfPj8/hAk74QOf08+ugqGQZs9wNihZD6
-# 2WAl7ligHZ1umF65imr60dvERfP33s8TUX/+62ouVxXrcmmJPhjSEGm10BZ8erte
-# ujXKFnaKYaF+ZwTr/Fr+wAu7RplQnsrriEBqpP5fAG7bBaqelbTHa4GLfPnCR2/N
-# ZTJ6YUhge6VHbQTn9cTz5azywcQdOtkz07tKfveGrS+BRkNQlbHMffZiYxEI6V8Q
-# CFm6rkvF6VYH9c8l5ryJ64uxk5mYJN1CXiqq+ve4dYc4jZj0EllNQjnhwRK9d8rC
-# mQyVc8uOatDytWj9be1+UyaX8Ngp4NAMnIB4+1detYIikODECDrRa7yPRZK8OclH
-# EzZNq2i1RMZxibxizmVitliDKCuQ/k51qM49n7Y+uJEOxvcJbg+XPx+1Pz9afsf3
-# 3D/JVyUHE8SFnmSc0MrYH8Rth+lyN3zaDy9l2ipZx9DuLgtddU0/1aPhI6TGa08O
-# pkxzmmtjs7ZQuoYSUUPNanG+XA1r3hdRIC6c8ODPK5fOESncepPooA9ETPrfcRV7
-# Rbwc2ZHR6xWztDuLf6dpkBzVPwrMz4l7osDmSg==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIOqO0Qgh
+# Db/1dEyqYxGObOrLB3CqSZUJXBuHLOpQD/UqMAsGCSqGSIb3DQEBAQSCAgBoa3Ri
+# OhpSt9ETkcUPjldaSeGBuhgWQ2/In01a6SKNd3WSKojgXfpyozJJXXrouw8fcblS
+# dg9gxpCCMKLIV5Hwcb4xTWNPUN1F/Zka4dlP1bE5ogkMQ4dQJVeGx2S5dGHKhbJU
+# lpEmtga4DhfzUPgTxhgRo9WuYgN6RzcXEO0LNf87GexlBA0zpLdSa11sDmbMhylb
+# 0U5wyUfwJiLUk2bawi6l7axRTYuZ3vPJQ2sfLrwNnAl7jGmuXcIKvuqi64eu8oJH
+# ERpa8ZBiE5EZCLu0tSBQQ1ZjOq50R01A5d3RSDjtLnPSgCB3fSwBRsjhQLFndlys
+# a3+HOzt9O+cO5mFmEjBIDWmglEGGDzWVT2MkEFGJZbT23hO7B2o0+YhoCqhxK6iZ
+# 64Xja+U96VhEHy5HNfOuQHRY1UHT8SnqdycNaFQ5m/98mWsDQ4PaXampEr91IA5a
+# hFrAyE+xjJNmcMUXBiSsFV+QLgEqBjK6ZDtRoSy+b+klJvRXrLIu7jiAvL94oGzO
+# 6z1Ve+/c//C//suOzSll/XSi2DzDRTnvhGd9qaesBF6u5XcaNazl6mGCv55/tJxb
+# V9iROtOTYz4N/+Ej5Xm2JNsDMTWIf9NOhD7RuFzeuh7qSybB3U717IOYMOBJGDVz
+# EKsJ7JbW/TxXSxAPTacWfLIf8GGldA6z1USchKErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

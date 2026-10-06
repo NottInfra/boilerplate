@@ -7,10 +7,7 @@ $All = @('gitleaks', 'unit-test', 'semgrep', 'sonar', 'build', 'syft', 'grype', 
 $env:RELEASE_PIPELINE = 'production'
 
 . (Join-Path $PSScriptRoot 'lib/Vault.ps1')
-. (Join-Path $PSScriptRoot 'lib/ProjectConfigParse.ps1')
-$name = [ProjectConfigParse]::ReadProjectName($Root)
-[Vault]::new().LoadEnv($name)
-$project = [ProjectConfigParse]::new($Env)
+. (Join-Path $PSScriptRoot 'lib/Yaml.ps1')
 
 $step = if ($args[0]) { $args[0] } else { 'all' }
 if ($step -eq 'scan') { $step = 'trivy' }
@@ -21,7 +18,24 @@ if ($step -notin $known) {
     exit 1
 }
 
+Set-Location $Root
+$project = [Yaml]::new((Join-Path $Root 'project.cfg'))
+$projectType = $project.Require('type').ToLower()
+if ($projectType -notin @('service', 'package')) { throw '[!] project.cfg type must be service or package' }
+$imageSteps = @('syft', 'grype', 'trivy')
+
+if ($projectType -eq 'package' -and $step -in $imageSteps) {
+    Write-Host "[+] skip $step (project type is package)"
+    exit 0
+}
+
+$name = $project.Require('project')
+[Vault]::new().LoadEnv($name)
+
 $steps = if ($step -eq 'all') { $All } else { @($step) }
+if ($projectType -eq 'package') {
+    $steps = @($steps | Where-Object { $_ -notin $imageSteps })
+}
 foreach ($name in $steps) {
     & pwsh -NoProfile -File (Join-Path $Root "release/steps/$name.ps1") $Env
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -30,8 +44,8 @@ foreach ($name in $steps) {
 # SIG # Begin signature block
 # MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBPZf+Vps9Zg0ay
-# NmCbxjxky2zsqDr4F58oRv3I8VUDWaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCRQh0e0E+0VNga
+# qhJjxjZdcXuRO10Kej1AM7KkBYbmraCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -52,17 +66,17 @@ foreach ($name in $steps) {
 # ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIDozGlr1
-# 0hdcvc1iIPWVI6FVj8KoW/7SGaiw3PWd25/CMAsGCSqGSIb3DQEBAQSCAgAJ2GkQ
-# x/G8Zq3JmUFwmQQZk18t+Y1nLdQC2cB4xmc6Y5DSzB/RW2bnTQLEpSgsI/a4KzOJ
-# ubJ0gEbPEgxbnBAmGIOk5ccB7QVl5LTk4uZVF4PZUuyB4ioBSrQ1B7is+Ri8hUdj
-# Aovdanjuo+n+w57ltbL8nsWHQ/Swck/vnk3LOSd8VwxRkUEcNgAX6qEC1WQoE3WQ
-# DvlltduMOj3NfDvlVNm4drAdXmcD8JXDuSzmWYDLr/ylZXCT4UXFltdk+4W3Q1T0
-# sAzO0zgewypXaVwAK4hUOKzAwyFalNeJTq4k0geiApwrQ6dd/cTIBxVO60njepVb
-# pnO7y+SFv/ZFtslF+z7KTbv8jHWLpuXf4/q/53O3PUkMvhU2l1519l9xk260f+aV
-# 9Tr7vmTBH+c36Dgkp6w7lA26aKiTO4oeV1hHxnaDxBmdqkpttFXDzU3Ex1F0eQnN
-# xvQzZSkUedxo+zlsjfrt9zRO2ZayjIQlSiEfTbiWhmSqj51+Vhdth6IP+CbNDe0o
-# lk2iudJsO0B9nRUnZfSPQ1NZgu3UhTB9UEs5RSFIVudqAY+dYtXwTHgRDazfEfCa
-# VIgFSTNzjVpwSRwaQOZL84GgysF14J9yJpzhYK2wg497NIc8SzA32+SzJlc/vw15
-# SMyFTwk4+EdICFH/ju/B9rPhxiZMu8uNSKt2Zg==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIO9PhGbp
+# Zubb2dN+i0Uud0szCN83Lk6hfdY66I6lUZrpMAsGCSqGSIb3DQEBAQSCAgBSq0qr
+# b49SV7UnkvutpFt8fT7FjadDLJE93AhASwtBHFc6LDf2P92ZEM+/Mf843n9m+GD3
+# q5raIlZcZonCQawF/poU8STKFrTdPclkT0nyRd34fI5jvYbfl/jrC76zsIWjsWja
+# TxiyDkHxsf5m2kCf7KbGpG5TzvU7MpuSxX7c4XYiXotWqNNZD4LFlGswhR6Njk6t
+# TIO+Q+YPPae0DYyFLPCTAKFESusi43HxBlDZ+89km3k3ul2UZe6jlSpvj6V1wGkf
+# u3ZaduNFnKmbf9d9eGmpXmTr6/y0PIm800AJO289ad0+sJOysE1ouCkJJyLKTeHM
+# h06F35bqW3qkY5vIybWMRdiIHHZ5wucYpDHc20uIh1H9OvwNVFFFVcN9iN48S6iQ
+# pQpdvsR9yUCAfuyF2il00oLq5eNe9QMgbKl2z9lfp2IEq1ES5B+7PvBQI4VHkIOx
+# EZJywoMsHe0m+111xMiq4vH5jFJk4dxLtU1KxoARQ1icyVouWgvpxd1CB4VddjYy
+# SEBSc6Z2PO9n8TXx7FCN9MnD2UHttZ+r4QNgcTwv/soo7K35R5mbCdMg1g59iNYf
+# Mcib8kPsDussHDkU+b8eguJn0gXEzYiyE9Qe54cbwqOFKOFNnFZBaY7USspIpk0q
+# YFRIm4I+zbAS6cUKRxpLO/6d1mpMksbtlCV6Cg==
 # SIG # End signature block

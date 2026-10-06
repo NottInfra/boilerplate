@@ -4,11 +4,11 @@ class SourceControl {
     [string]$Channel
     [string]$Root
     [Env]$Env
-    [Config]$Settings
+    [Yaml]$Settings
 
-    SourceControl([Env]$Env, [Config]$Settings, [string]$RemoteUrl, [GitHub]$GitHub, [GitLab]$GitLab) {
+    SourceControl([Env]$Env, [Yaml]$Settings, [string]$RemoteUrl, [GitHub]$GitHub, [GitLab]$GitLab) {
         if (-not $Env) { throw '[!] SourceControl requires Env' }
-        if (-not $Settings -or -not $Settings.Loaded) { throw '[!] SourceControl requires settings.cfg' }
+        if (-not $Settings) { throw '[!] SourceControl requires settings.cfg' }
         if (-not $GitHub) { throw '[!] SourceControl requires GitHub' }
         if (-not $GitLab) { throw '[!] SourceControl requires GitLab' }
         $this.Env = $Env
@@ -88,15 +88,16 @@ class SourceControl {
         & git -C $RepoPath config gpg.x509.program gitsign
         & git -C $RepoPath config gpg.format x509
         & git -C $RepoPath config commit.gpgsign true
-        & git -C $RepoPath config gitsign.fulcio $this.Settings.Endpoint('FULCIO')
-        & git -C $RepoPath config gitsign.rekor $this.Settings.Endpoint('REKOR')
-        & git -C $RepoPath config gitsign.issuer $this.Settings.Endpoint('KEYCLOAK')
+        $kind = if ("$env:NETWORK" -eq 'cluster') { 'CLUSTER' } else { 'PUBLIC' }
+        & git -C $RepoPath config gitsign.fulcio $this.Settings.Require("ONPREM.ENDPOINTS.FULCIO.$kind")
+        & git -C $RepoPath config gitsign.rekor $this.Settings.Require("ONPREM.ENDPOINTS.REKOR.$kind")
+        & git -C $RepoPath config gitsign.issuer $this.Settings.Require("ONPREM.ENDPOINTS.KEYCLOAK.$kind")
         & git -C $RepoPath config gitsign.clientID $this.Env.Require('OIDC_CLIENT_ID')
-        & git -C $RepoPath config gitsign.redirectURL $this.Settings.Require('SIGSTORE.OIDC_REDIRECT_URL')
+        & git -C $RepoPath config gitsign.redirectURL $this.Settings.Require('LOCAL.SIGSTORE.OIDC_REDIRECT_URL')
         & git -C $RepoPath config gitsign.autoclose false
 
-        # Private Sigstore TUF — gitsign's embedded public root expired; use ENDPOINTS.TUF.
-        $tufMirror = $this.Settings.Endpoint('TUF').TrimEnd('/')
+        # Private Sigstore TUF — gitsign's embedded public root expired; use ONPREM.ENDPOINTS.TUF.
+        $tufMirror = $this.Settings.Require("ONPREM.ENDPOINTS.TUF.$kind").TrimEnd('/')
         $homeDir = if (-not [string]::IsNullOrWhiteSpace($env:HOME)) { $env:HOME } else { $env:USERPROFILE }
         if ([string]::IsNullOrWhiteSpace($homeDir)) { throw '[!] HOME/USERPROFILE required for gitsign TUF cache' }
         $tufRootDir = Join-Path (Join-Path $homeDir '.sigstore') 'root'
@@ -274,7 +275,7 @@ class SourceControl {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
 # KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCANG0eZQ/PaZpAz
 # YDGpQMqRvtmPZ3cyzx7eZaxPTLqBhqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
@@ -295,7 +296,7 @@ class SourceControl {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
 # KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIF2YUutA
@@ -310,5 +311,46 @@ class SourceControl {
 # TSs4FoMly53DMCRPXRYw+SeN9O+cTuaBDjlfbENvFIaqgJaiHn6Rn3W+sNwq+pEy
 # 3WbA25GUMVWOz/X9s1hN5HCNan3EATwFciY7YAgPnWhFYAV0E36ZGKX88aPYY89C
 # w7iwQdg1STO2rMA4fh45N9/ANVqwk+7AoK1FXvW0hYRqcDwJBSm/aehgURO5r0Ce
-# nii/YAcs5E1UL4fwmfpzwYdFUa2zWVJXTBSA8Q==
+# nii/YAcs5E1UL4fwmfpzwYdFUa2zWVJXTBSA8aErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
+# SIG # End signature block
+
+# SIG # Begin signature block
+# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBF5wN6XfunYvjb
+# 6v3QN3QZbisZ2CQeiTaEXZ/o3xDEe6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
+# ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
+# VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
+# BQADggIPADCCAgoCggIBAKRICuzioM/pLsdWW/uV0Hl7Y5FHNBPTEl3X/oGK+BAi
+# kC0es0CLXLykWpsJ/f9ldyyHlMzwUR1zEIhCZXEyo+uqQ8B1yWke7rQ4wkWE6/DU
+# htCLSiySkf/KB389/ptcEM+jJ48DQGi0+8K6QQ02vEOAQKLfxA4Rrnl5BYY+nnNs
+# Rpa+B6K40i/aFAsc60gbG3SGQePzuHHbPl6CE5AzQNY2WBpY77aonZ830RM5AsS4
+# Xe7P8cDJ7Gahw6ZjLEriCaR3xBytPy63RiZdW8upuQ0AIFz4/8GVRYuOJ1wGeU53
+# b0OZhj/6Z481Zry0VcBvGfHidIVkQKbWZQ2QWdkSBbSAIR92tKpSqSDy4VQYQ4RO
+# l3NY/QHkJsAl6EGzQ514P+qUzkSyxgSNHZFCknqTu6gXtemaCUC7z/eLZDibw+mg
+# yAuyLTZoeAlDPaHT4FOPfB8pn6UuGb/LwJwFlBHGAkaYlfAkx3BJYIsQpfPwKxfN
+# Ufds8LMYArJlFZJnJ1EmJSE+qIu0cN7SyuFDAdGszrVjltYswzAfhE0NRQQm4HiG
+# CWG9ZxDD1TxbhvEecgJCOMy/dZCcjEEzq4wZxSVPicn0QowKDWHy1GpgdR3pT+Ok
+# zuIBpfEeXW5uW9e0yoOzwOnh1XCRp8hv+B4l4RvTEl3ccZ+PcmAcsLHODqvW4vmT
+# AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
+# MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
+# ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
+# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
+# EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIIEjsRHb
+# W9dOrnoGIX4H0B8pnsPBfUXaC7KI3Mk44pKzMAsGCSqGSIb3DQEBAQSCAgAoJJyZ
+# 8wIe8UfLpAJQTuJxJ0tWPpE7vhhxAMjVtgMdmMxZNd1gpTU49OPgykm+5rWwXcA+
+# 5jN3jcoNTOjyVo/jAq8a75UV94G14wZT8CCXDAX+RKSVequE6kDTxUxrfiOI6cUA
+# qBZzU/6J4iDBo3U8S/myP2w/1Gx9ba8fafm6IjJRvnsII3n8iVPQgn9oLAX0yC99
+# gWDG6jxYDANaLLVyInQ7OVfjGU6EwKRcGdaGCrFRuPvadKGbGUnLHqM0DxVVx1eq
+# NTE4aEyRjsLPv6IrB8oP2gRcmZmTv1oFwoqHoOACmYT6TWGedmMZcT9mfSeJ1e+D
+# KVCBi+mm174bDXoCtIcZ44VXUzPCr0iV1DbZuosUaKmgaRxSpDcHVmpl69oITVkS
+# yya1tdxEdGHo5TfgNetOcT0sNaYnofCkIzC+n84zCvf6alfYAw7iL2Ei/GrA3Ry2
+# pzFkv2JW6A2pFT1QuQRI3tCYca3WT0H7O61ql+Bb2goko50EQ5E18GSRsuC8Cr4x
+# pqpu3hOP5MRgIw6G5ATFssOxvdOs1ExJnzo7HtfKd3E81DK3+i/8AG9B1nRGDRtJ
+# xmZB0f2uglvTEPw14XEMjeNjHLH0cdOrGI/RPpJJTKX/gxr3G87axA9G/2qjNTCO
+# XYMiI+horKNOWXAvg/vHERrQ0KJ8jrZK+O/hbw==
 # SIG # End signature block

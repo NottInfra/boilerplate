@@ -55,9 +55,24 @@ class Env {
 
     [void] BindConfig([object]$Settings, [object]$Project) {
         $this.EnsureNetwork()
-        if ($Settings -and $Settings.Loaded) {
-            $Settings.ApplyEndpoints($env:NETWORK)
+        foreach ($entry in $this.EndpointEnvVars($Settings).GetEnumerator()) {
+            Set-Item -Path "env:$($entry.Key)" -Value $entry.Value
         }
+    }
+
+    hidden [hashtable] EndpointEnvVars([object]$Settings) {
+        $out = @{}
+        if (-not $Settings) { return $out }
+        $kind = if ("$env:NETWORK" -eq 'cluster') { 'CLUSTER' } else { 'PUBLIC' }
+        $eps = $Settings.Get('ONPREM.ENDPOINTS')
+        if (-not $eps) { return $out }
+        $names = if ($eps -is [System.Collections.IDictionary]) { @($eps.Keys) } else { @($eps.PSObject.Properties.Name) }
+        foreach ($svc in $names) {
+            $val = $Settings.Get("ONPREM.ENDPOINTS.$svc.$kind")
+            if ($null -eq $val -or [string]::IsNullOrWhiteSpace([string]$val)) { continue }
+            $out["${svc}_URL"] = [string]$val
+        }
+        return $out
     }
 
     [void] EnsureNetwork() {
@@ -109,11 +124,8 @@ class Env {
         if ($this.LoadedFile -and (Test-Path $this.LoadedFile) -and $this.LoadedFile -ne '.env.shared') {
             foreach ($e in $this.ParseFile($this.LoadedFile).GetEnumerator()) { $data[$e.Key] = $e.Value }
         }
-        if ($Settings -and $Settings.Loaded) {
-            $network = if ($env:NETWORK) { $env:NETWORK } else { 'public' }
-            foreach ($e in $Settings.EndpointEnvVars($network).GetEnumerator()) {
-                $data[$e.Key] = $e.Value
-            }
+        foreach ($e in $this.EndpointEnvVars($Settings).GetEnumerator()) {
+            $data[$e.Key] = $e.Value
         }
         if ($env:NETWORK) { $data['NETWORK'] = $env:NETWORK }
         if ($env:DB_URL) { $data['DB_URL'] = $env:DB_URL }
@@ -174,10 +186,10 @@ class Env {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDlRIArXD+Svnew
-# 22uqbtQA/+cofWYvIXcGbOUH/RHyQKCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD+YRBbImh9aggY
+# yn7d7D3ZZYNKuoeDYi4Cvsa34XVzW6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -195,20 +207,21 @@ class Env {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIKPB7gT6
-# WndQmc2tWCQmtG9///M+9YY2Unhc5ewyz5obMAsGCSqGSIb3DQEBAQSCAgCO1Yt/
-# oVDuIxb7ei21wDMSt6/hmdZFM9ie6aKYFkdNcOkOxxpS2QnAccHg5PlVFo9w97aR
-# 5pYmE47PlCrLScDYzQvVcz6fTCmhWddCQeUowMdkQvyn7TRBAG3FdB9ixAj4L0WQ
-# z2CtgHNvuBaU64Q5sVDHw0Q0GuEd/R63kL0sh4jYnOdifFiVokzVxHFIBAWQhkap
-# eSFN+bp2JPlR/46egchZhc81UDJ+MpcI5qrLcGKTxaeehPV2bLkSXDpBSPwXaCgs
-# wM6hs9OqCnjJP2Ho+t/fBQL1LYDnCrgT8zhYp3xpbLBuWOyiu6+/yNLo/wrPjBsj
-# 086mTeMbA4XleBu/2dl6LDttGZ+2KgLzZSR1bVwXPfU++nBye4Jo0YQGq60HsSS8
-# yNRPCGIg3jUtnqir23jvrdBQ769VQ7dnnAflz5slVcQRinENNEKZxl0xtXXARk73
-# KmDJwXV5bsMZIpAIifuGBdoVuhmSIUBt3weA+9lytFU73Z7yDR5DOqbyH23y4LSN
-# 7XBBuy8JEa8GZj/aEPhAeoqbIFUXIhoju+VCeuHbxU13ujJe77idxS+VfJWKhMzF
-# Bm17AOjBe80tvNaoM+mDVEJEARQVROo/CspDiRl8KNKoMKAaDjuYjKR5GsoM+EFh
-# RTTif9J/aQJCS/Be4WY8avomh9QfoDCa3O7hdA==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIKS7dQv+
+# LJyWUe0+YLwkx75kd8wnwpMU7MexJVGf0dSqMAsGCSqGSIb3DQEBAQSCAgCSeqae
+# wP6e23XtBRVZblOcJd5eV8ORLPxpFjbuwn9zKR0l2SnmGANzSGMP0d1C1ZEEKKRp
+# HMdXVgDkUvW8f98FQaXA19o09jEri8o/Lbb4uyRIPZ4o9Nzk8yD8INfJ9a/YspOL
+# +aGc84zX0eY26r3FFEJSvsqXri7jo5lhLr96Nau488f+kBS7d8NLQ7ottRoiYEfk
+# SzO70Fm8dgJINsoOHJ3+xdGFA5RdVo8J7qiHVMYzT5YwXJejhmC95VL9HHO5gLZ0
+# 0d94gD14WgTT6WNuIS5Y+0Ncdb7KebaYeT+538LOCh9/J1GOkW554pKFPqZXnwym
+# 8hpUOdz7j2oWaaYYrRnMgnmiDwYygh6PsgU5CVv4CLQIgdtpPE5QnVq6msICtTo1
+# LULkl4tCp5F4phLYL4niKHV+OOK9hqvhBkLJ0MgU0d8lNZMjmCxpmReOeOjDFHFh
+# aK8bhHX289RP4ood5wM9PdaFBKH7DEIux24N57V2Z55l6oHdXp/FG6gFHR39YScV
+# K+FFaN7MniucAf8vYzQ+i652bwwRPC1OIuaLsEDEEO5OkIdGn7wUYrHxAmOtW02C
+# NBeC0RhEkk+FZ/M4BmbaLCk+wtaF3AOpyi3gEvhBFMCrJcxrNlAa8gqQLnc3/GOZ
+# YeCxJ/mimvSe4jTG2Es8Vsa146G/AIQcV9jpH6ErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

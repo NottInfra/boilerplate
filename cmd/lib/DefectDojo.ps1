@@ -2,11 +2,11 @@ class DefectDojo {
     [string]$Url
     [string]$Token
     [int]$EngagementId
-    [Config]$Project
+    [Yaml]$Project
     [Env]$Env
 
-    DefectDojo([Config]$Project, [Env]$Env) {
-        if (-not $Project -or -not $Project.Loaded) { throw '[!] DefectDojo requires project.cfg' }
+    DefectDojo([Yaml]$Project, [Env]$Env) {
+        if (-not $Project) { throw '[!] DefectDojo requires project.cfg' }
         if (-not $Env) { throw '[!] DefectDojo requires Env' }
         $this.Project = $Project
         $this.Env = $Env
@@ -19,7 +19,7 @@ class DefectDojo {
     [int] EnsureEngagement() {
         if ($this.EngagementId) { return $this.EngagementId }
         $staging = if ($this.Env.Name -eq 'live') { 'live' } else { 'test' }
-        $engagementName = "$($this.Project.Name)-$staging"
+        $engagementName = "$($this.Project.Require('project'))-$staging"
         $productId = $this.EnsureProduct()
         $existing = $this.FindEngagement($productId, $engagementName)
         if ($existing) {
@@ -36,7 +36,7 @@ class DefectDojo {
     [void] ImportScan([string]$Staging, [string]$ScanType, [string]$ReportFile, [string]$StepName) {
         if (-not $this.EngagementId) { throw '[!] DEFECT_DOJO_ENGAGEMENT_ID is required' }
         if (-not (Test-Path $ReportFile)) { throw "[!] report missing: $ReportFile" }
-        $title = "$($this.Project.Name)-$Staging-$StepName"
+        $title = "$($this.Project.Require('project'))-$Staging-$StepName"
         $form = @{
             scan_type         = $ScanType
             test_title        = $title
@@ -56,12 +56,22 @@ class DefectDojo {
         }
     }
 
+    hidden [int] ProductTypeId() {
+        $headers = @{
+            Authorization = "Token $($this.Token)"
+            Accept        = 'application/json'
+        }
+        $r = Invoke-RestMethod -Uri "$($this.Url)/api/v2/product_types/?limit=1" -Headers $headers
+        if (-not $r.results -or @($r.results).Count -eq 0) { throw '[!] Defect Dojo product type is required' }
+        return [int]$r.results[0].id
+    }
+
     hidden [int] EnsureProduct() {
         $headers = @{
             Authorization = "Token $($this.Token)"
             Accept        = 'application/json'
         }
-        $name = $this.Project.Name
+        $name = $this.Project.Require('project')
         $uri = "$($this.Url)/api/v2/products/?name=$([uri]::EscapeDataString($name))"
         $r = Invoke-RestMethod -Uri $uri -Headers $headers
         foreach ($p in $r.results) {
@@ -70,7 +80,7 @@ class DefectDojo {
                 return [int]$p.id
             }
         }
-        $body = (@{ name = $name; description = $name } | ConvertTo-Json -Compress)
+        $body = (@{ name = $name; description = $name; prod_type = $this.ProductTypeId() } | ConvertTo-Json -Compress)
         $created = Invoke-RestMethod -Method Post -Uri "$($this.Url)/api/v2/products/" `
             -Headers ($headers + @{ 'Content-Type' = 'application/json' }) -Body $body
         Write-Host "[+] Defect Dojo product created: $name (id=$($created.id))"
@@ -110,10 +120,10 @@ class DefectDojo {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCQKtlw+R1MEa3x
-# 9fj7+stlPDFKBxBk96EfmK50X594c6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBtF/1MQbhooQVs
+# SgFh2aPK7LdXqk+vVvnYn19oJLjLdqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -131,20 +141,21 @@ class DefectDojo {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEICqzGddK
-# lNjWGY7CgVUw/Q/c+KXqhrvtDBv3+P7o/eMUMAsGCSqGSIb3DQEBAQSCAgCPO3Ek
-# QoMlB0j13JKEx1htZ63n811a1qZQN2Xbc2k6mMztqqVzN48d03dYicvQutw2ksxT
-# BjWhMCuL7cdHVzOzKPjZWb68HFTtmHiqLV2JWlzrCusMmgqFzgJ7snUuwDQnjJwJ
-# jtftoJYaO/Q9k12HjVmDaGsN9wJI2oQlUkJV0bEIjhJtPlwoeDTp9D3RtXtCJWQY
-# ruj83RZbumr7RFu5uFZ284ApvGC31PED0gL0x/wcKQPmGsgCUNJOlIojwgA47dfv
-# btcGD7zrlThbgtYhydmidahLvkk4VvtphQ0s2kciUPDaK2i2sS0sSCGhawSkTwQO
-# Kj4BnbSYQfhW0IGZ8ljU1pXlJW6oQLcN+9aZ8onZ5z20OxtC9ZbogVCvzUIrGJm6
-# 6bML8TdagtQp+VB7dHY84P1CesfEpm1lB3TankjocqvF/a7Zd+aeIoqdia7SkyGj
-# B1WbulRprhjEEhblcQsyA+4oS23BReHRjz/ICTy09rjhC3SWm5nbKu5PcYUeU53G
-# jBHLd2u/oQoahtelqAeqp833TGVBfmnaCZIj4FruCtjHaM3YrtUdoK+LBz+nXaRz
-# TChVwuukGToYHSTv8m6t6LXpNmkWxPNC3RM4uAy8b3qILF6eH60bbMpj2w4rOtN3
-# xMoAxD8dxW9+grYruSAoKwKWux6zfkqxSz+TYg==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIGMvhvwq
+# KsjOgEYihG25M1roov78EeuyS58XEx7ugRVIMAsGCSqGSIb3DQEBAQSCAgBCJ7Zr
+# 6IE2JcN3doDsM4RGyvDqh5YOXRgnyZPZJtLVG/D5ftTmE3PItxf2BJZVht/Z/IDE
+# 4/ozH1MTihlOEx2y7rKvpQQbNDsL77DrpBgAmAa88LBUQ0Xp32DFzzrS/4jYNlVQ
+# 1NLP/7ZJP5LJ4ntFOxmqIaux52gPVNDKy/rJDAz94DF4GLgdcRuRrxQ58ASR6+Fd
+# Kxcq4UdDQ9ZCg8tqjkrLk/dU7XgKl5K3/rsaOeBJ3cwtVZJghmXzO+lcxcXqT8T6
+# WECdWhoOePFglXAbdzDdSPF7wOII5OO6f2RAGi01ux9TE8bZiitVKcGuJNUL6P/m
+# ZHPV1LABujR/QPqU/01zYSAAjgocgnoPIcvKJjiEgiDsjDDUR9cm0bzWpciwe3WJ
+# yq+BiKfhP9EUNOWDyfrbfHn1J3wSnw0I0i7C4ceA7lloXik7BbZRwn7V2DchXygi
+# dABJ5RJS8N3Fj4tFIuARWxL2QcilyJ475Pp5oXE/c8POHNRf62IkA29Ml9cKo2R3
+# CAGwcSXZOk2qeEHWqTMHCQ6V4E8SiZ2u1mRHFrporL4EV5ZWgfo+2BTBvv22DRHK
+# wg0Y1KEtnXvZkHKh8zw+TDk3FwaQTIjRPv8SnfWhe0EBxIJMbv2jthMDjYQyk3ot
+# 3xyirIAydws0oXfOKZIJMxqR1hXhgQo5NOX286ErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block
