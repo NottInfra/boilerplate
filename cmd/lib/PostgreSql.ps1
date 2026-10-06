@@ -11,19 +11,19 @@ class PostgreSql {
 
     [void] Apply([object]$Settings, [object]$Project) {
         if (-not $this.Env) { throw '[!] PostgreSql.Apply requires Env' }
-        if (-not $Settings -or -not $Settings.Loaded) { return }
-        $network = if ($env:NETWORK) { $env:NETWORK } else { 'public' }
-        $endpoint = $Settings.Endpoint('DB', $network)
+        if (-not $Settings) { return }
+        $kind = if ("$env:NETWORK" -eq 'cluster') { 'CLUSTER' } else { 'PUBLIC' }
+        $endpoint = $Settings.Require("ONPREM.ENDPOINTS.DB.$kind")
         $user = $this.Env.Get('DB_USER')
         $pass = $this.Env.Get('DB_PASSWORD')
         if ([string]::IsNullOrWhiteSpace($user) -or [string]::IsNullOrWhiteSpace($pass)) { return }
-        if (-not $Project -or [string]::IsNullOrWhiteSpace([string]$Project.Name)) {
+        if (-not $Project) {
             throw '[!] PostgreSql requires project name for database'
         }
         if ([string]::IsNullOrWhiteSpace($this.Env.Name) -or $this.Env.Name -eq 'shared') {
             throw '[!] PostgreSql requires ENV (development, test, or live)'
         }
-        $dbName = "$($Project.Name)-$($this.Env.Name)"
+        $dbName = "$($Project.Require('project'))-$($this.Env.Name)"
         $env:DB_URL = $this.BuildUrl([string]$endpoint, $user, $pass, $dbName)
     }
 
@@ -80,10 +80,10 @@ class PostgreSql {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA/GxmFgdJEmunj
-# WS5ppQAAfRS6sogmDT10OTsZ6th1wKCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD462KCFC3RDRrT
+# DpSnbAIxJb27zDK8FI4NY2aCzuKCnaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -101,20 +101,21 @@ class PostgreSql {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIBoPXl8p
-# ItsmIAI2w9CCftG25tcOQ8pWyzytQ+Ef76cFMAsGCSqGSIb3DQEBAQSCAgBYCiUn
-# oo2GZFMJmPCM+5y3JihlcFCk86ILMi0mLHiwmkpo7YlN+aifYIZcREf24RcgLQz/
-# w6ZDtJiWE9Jr0UKkgoNSUIESBt84bK4fRgw6qS2NKcsk09us4mh7L96hCXEyyM9B
-# CxMvg8NFQfTcFotgQ+i6h0K5hzFJVul4RZra9V4r/pbQtx75+OmLtzVj+IQtwk9q
-# eRMLAnnsIqh8mwkoqQGF09O3Iu1B4gimPP5sVFeOvNYDpi0Ar0AxcNvxuQv9+/Wz
-# umr2aFKv+WIzwoLphWH/xIZnUT24+sd+n96sUtAFNEO/RCXP9PhNY7lfFfxwnx7p
-# 7H7Jul8qpa3xSFZlDJhRD9VGTQpqYG4xj9wwGQp2cx82ceC+Pmw6dkKH/zBC4H11
-# zodBW9Ga+O2Rda+e1x6AWlGRwykXFFuPlOpSaVlnowis+RsEuGkkyK86AXuFtlCt
-# Ybjwd/5tS8FuodbF9kMOVxOvo1I6CRS7DeoPqwXmV+6EjfF5Koo+MI44RD744qRA
-# ZCdFZ0VKZxVHoP2cgXQbLm04cyIXujRtU5ba2Ua1WDxWr4X7kARFkI7K6pw8SKZS
-# XfDh6IYYkZek+H/APwbILsMcxYu6LgII4thUg0bnuXIz5hi0OC8OUkSjModLWxN6
-# zKUrKoq3z7yXd4XY4oioCeCh4AjsiDr6WzA1Xw==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEICqPKk4P
+# vBp+qnkpsmu1Hq937N7j/1SFbD6AY04jtjXuMAsGCSqGSIb3DQEBAQSCAgCNKMUu
+# SquDNU88xjggYoL1385mp0kvItcvoFRZ1uf24Gbrx0NIeAx3sbG2DKoKJ7X3gq1R
+# D+J0nbIzRCmk9qud0GrmwGXMXQflGKi3+AICSPRw6CyNdCnG8N7RgAgYkdr4NaUQ
+# i6HV8+rcJ2j3WvBB8+B9MK0uS4UMAwhCM9/+3B3wX5xW2AWJ5H1yqmQ53zXXmD3X
+# 8cP+CT1XuC1F4Ww1rrxEM0YmsoQMVlFjYVnZ79xxugQa65jX9ENO/7mjBpSFI9jC
+# ib+GVTi1TYpzqJdg9ECvleso3N3r5lGAUJJ0JFYOH0Wk0L2ZgLAi2fxP5pb7BmnD
+# zQOggROHxfMFCMAQDMub8A1btsN8rPuGxCRpftrC/+Sed1+tESZUJnABSuYc0fUM
+# uNwt8y4KUas3l9k3/DxkRdDOHjXpfD4tNOZGYjiUfMQSWsTIloybyJL89GotGDgZ
+# FcFSkB7BGizaDzWcb2/nemskHYnE0LOpETG5INH8QXpIuMQ44JP8QbA/XS6lOzIK
+# 2P9UsbQLXhGaOETlXQlyItm+9KUcxTDLChVb+uE5x9J5nsVitGTeYtNvh7pHYI9D
+# OHCLyEAlFv1k9Dw8y5zBBiJnXXwSzmG8CNU/QsxTJGNe8ocD/eU63NgXLlvyYfHC
+# O1a2KVZUK36N1rZj1vt+zj7UUNQAyUzxb8qVQ6ErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

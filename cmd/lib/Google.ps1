@@ -7,11 +7,11 @@ class Google {
     )
 
     [Env]$Env
-    [Config]$Settings
+    [Yaml]$Settings
 
-    Google([Env]$Env, [Config]$Settings) {
+    Google([Env]$Env, [Yaml]$Settings) {
         if (-not $Env) { throw '[!] Google requires Env' }
-        if (-not $Settings -or -not $Settings.Loaded) { throw '[!] Google requires settings.cfg' }
+        if (-not $Settings) { throw '[!] Google requires settings.cfg' }
         $this.Env = $Env
         $this.Settings = $Settings
     }
@@ -34,7 +34,7 @@ class Google {
 
         $clientId = $this.Env.Require('GOOGLE_OAUTH_CLIENT_ID')
         $clientSecret = $this.Env.Require('GOOGLE_OAUTH_CLIENT_SECRET')
-        $redirect = $this.Settings.Require('GOOGLE.OAUTH_REDIRECT_URL').TrimEnd('/')
+        $redirect = $this.Settings.Require('LOCAL.GOOGLE.OAUTH_REDIRECT_URL').TrimEnd('/')
 
         $listenPrefix = $redirect.TrimEnd('/') + '/'
         $listener = [System.Net.HttpListener]::new()
@@ -104,10 +104,10 @@ class Google {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCARgZLMyDQhQyWa
-# C4typQIuV7xw8A+Q0cgxY1BDFmFA86CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBCu10FCBkQtiO+
+# 4FaKjUvpPQlBAikYe0V5L1sIY9/KQqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -125,20 +125,21 @@ class Google {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIMmMOwpq
-# /vXB6LuehrwCVDzVARvRr8a52DF2lDeMmHpUMAsGCSqGSIb3DQEBAQSCAgCN9H5p
-# VVMJJKsQgch2V+b39az37dBAgZnAXy7AQ915jq34wsOanGqFg56tMBvzNtQWr6m6
-# 3weSb9cBDkZWjzEfCOAmxFGkJoRYHQqJejLZYa0BS0h/nrjU3dp81SjVY/PQbir1
-# o4pr/wnRmeHSN/yAeW7yTHbvbLBhYELdxhOah+9WokMtsfDEHj3wB7l3P3eQh7Ao
-# CjHRR7fncFhMLkDcNHcZXutwC5ASrUxd+zxtSXchsw1jP/xBKW8kiDgNiT/NO5SQ
-# DX+nrtL3g3NLXrb+sjDciaYVwrnKhfXsWLan93kdh/r7FX4PsU/rtqWrpRFPHxS+
-# MOBhqmncXv4My1yBpt7Mwb/YeBvfhVe/0A1Bm6IloFeRDqc5yB2eeo1xtFyKkKi3
-# 6c1IExL0BJ4XIYd6A97TuisAST4JXRELrxNTl0IUAQWZpLuhuBcuWwUphKwZa5mm
-# DHISFXbvJDU/jmF3+siNXMfmYiBIzuWmCl2CUsfhf0qO+6p9FhmpIxaW+Gsa/lWd
-# 0dlLlHX33+kZVWrrKdHLfdqz3yr0P6XCcJqHvXlkw8fJRxNbrWtP8Qprejdzw/jd
-# WqLGR5qujnvepXo4glBLIMwh586tWDfvt6A12LZ5hyMnEgfa4mlycxpOLWhnUrVp
-# 8zn4mcRWH97AvryilspVM3rUpwZzGvxfb4H5gg==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEINviqLWX
+# P4VAMC3NhWPPamAkPsZwiaUlN0nt6Q6fS5c/MAsGCSqGSIb3DQEBAQSCAgAq4UVL
+# hPlavzs/yaF+cOtUAp4lFNCcdOir/NePadyyCk/cGZ+6kC0XNhtoF2M6YAZ3RxxR
+# qVF7OKfU56Hw6mz3k8v0wW2xXuwbq59Z/Owvhg6r0u4cYMaHEF6aN6A8cE7LaSxw
+# haQ5r2vob2mM/xGyhEnXE6+mHrJEG35qhFcOIgZw0fVgSr1WCsfB35eBqzP4ASFL
+# iZAOOraNjerO1wPZJwQqkkzCfdSu91tgafi8KfAeANjKZpL5jiAOswpg+6Exg9+h
+# iW2PJSfCfOTJxUoJYvm3/wnG87z8UYzjyZ8CKWcOSDJWlAPvgGSsjNLfgDztP+xh
+# Za5BDNCci36d7HsgvJss/jURcF7TSveR5obQVsoqFTXKiloIV7ciBPMHE1zb2I+m
+# Yjoc3q9NXTZaAYDmcvDEXCB3y8Aap+AxhuCKEAOjUzloQoJOw6MpvOHp1oZlCtGY
+# yNaG3iZX54H9xe7W7l1uwXfowzc59IMZCtgGpimVflrDzsGpvKlt/lx8dCPAhW8O
+# lRm94A8yHB6W+f0K4qfvgvyjU/jdyffqlcGZqum3wuyZnlruZNhVpO2aEPmz5PD9
+# /SGv1Ij5CwRBMdFJeEFhd8fBuHnQSRoNCrYpl8Y+7yH68kngNNz5kb3oMB4TPHZN
+# Smt8JEtIYrATmRTOTh4qPWxhCf/mWsC0IT00KaErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

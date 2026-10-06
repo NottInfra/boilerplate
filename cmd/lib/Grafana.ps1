@@ -2,10 +2,10 @@ class Grafana {
     [string]$Url
     [string]$UserPass
     [Env]$Env
-    [Config]$Project
+    [Yaml]$Project
 
-    Grafana([Config]$Project, [Env]$Env) {
-        if (-not $Project -or -not $Project.Loaded) { throw '[!] Grafana requires project.cfg' }
+    Grafana([Yaml]$Project, [Env]$Env) {
+        if (-not $Project) { throw '[!] Grafana requires project.cfg' }
         if (-not $Env) { throw '[!] Grafana requires Env' }
         $this.Project = $Project
         $this.Env = $Env
@@ -14,7 +14,7 @@ class Grafana {
     }
 
     [void] EnsureFolder([string]$FolderUid, [string]$Title) {
-        $uid = "$($this.Project.Name)-$FolderUid"
+        $uid = "$($this.Project.Require('project'))-$FolderUid"
         $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($this.UserPass))
         $headers = @{ Authorization = "Basic $auth" }
         $code = 200
@@ -27,17 +27,17 @@ class Grafana {
         }
         if ($code -eq 200) { Write-Host "[+] Grafana folder exists: $uid"; return }
         if ($code -ne 404) { throw "[!] Grafana folder GET HTTP $code" }
-        $body = (@{ uid = $uid; title = "$($this.Project.Name) / $Title" } | ConvertTo-Json -Compress)
+        $body = (@{ uid = $uid; title = "$($this.Project.Require('project')) / $Title" } | ConvertTo-Json -Compress)
         Invoke-RestMethod -Method Post -Uri "$($this.Url)/api/folders" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
         Write-Host "[+] Grafana folder created: $uid"
     }
 
     [string] PrepareDashboard([string]$File, [string]$Slug) {
         $dash = Get-Content $File -Raw | ConvertFrom-Json
-        $dash.title = "$($this.Project.Name) / $Slug ($($this.Env.Name))"
-        $dash.uid = "$($this.Project.Name)-$Slug-$($this.Env.Name)"
+        $dash.title = "$($this.Project.Require('project')) / $Slug ($($this.Env.Name))"
+        $dash.uid = "$($this.Project.Require('project'))-$Slug-$($this.Env.Name)"
         if (-not $dash.tags) { $dash.tags = @() }
-        if ($dash.tags -notcontains $this.Project.Name) { $dash.tags += $this.Project.Name }
+        if ($dash.tags -notcontains $this.Project.Require('project')) { $dash.tags += $this.Project.Require('project') }
         if ($dash.tags -notcontains $this.Env.Name) { $dash.tags += $this.Env.Name }
         if ($dash.templating -and $dash.templating.list) {
             foreach ($item in $dash.templating.list) {
@@ -70,7 +70,7 @@ class Grafana {
         if (-not $files) { Write-Host "[i] Grafana: no dashboards in $Dir"; return }
         foreach ($f in $files) {
             $slug = [IO.Path]::GetFileNameWithoutExtension($f.Name)
-            $folderUid = "$($this.Project.Name)-$slug"
+            $folderUid = "$($this.Project.Require('project'))-$slug"
             $this.EnsureFolder($slug, $slug)
             $dash = $this.PrepareDashboard($f.FullName, $slug)
             $this.ImportDashboard($dash, $folderUid)
@@ -84,7 +84,7 @@ class Grafana {
         $headers = @{ Authorization = "Basic $auth" }
         $doc = Get-Content 'alerts/grafana.json' -Raw | ConvertFrom-Json
         $this.EnsureFolder($doc.folder.uid, $doc.folder.title)
-        $folderUid = "$($this.Project.Name)-$($doc.folder.uid)"
+        $folderUid = "$($this.Project.Require('project'))-$($doc.folder.uid)"
         foreach ($rule in $doc.rules) {
             $json = ($rule | ConvertTo-Json -Depth 50 -Compress) -replace '__ENV__', $this.Env.Name
             $parsed = $json | ConvertFrom-Json
@@ -117,10 +117,10 @@ class Grafana {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCjzIZ+sWB91qSD
-# LIh9/+IA6I30KJWrccF2rtbrrRgAv6CCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAsA548D85w/DFH
+# OM+GGwHKiG3YfpSIw68adwceBl9B2qCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -138,20 +138,21 @@ class Grafana {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIL/fasig
-# FxrKZDW87W4pd+m94DDKh9BCmdLP6GhqCvJfMAsGCSqGSIb3DQEBAQSCAgA++8yw
-# D5fUHS4Sde7gpNigVrgsD8wmuoliXRhQTA+MULhdrm4hB5bGdgoRLWOqOfP5JHux
-# C+fES4z35x6t4w4RmJ1DYZxAoNXQ/pFqjGgOXxTLGgZBMR3nSopx9UMk+IPbxP1c
-# VsbPPjebzdPL8s2pb5hdRKkEZlV3NHTv2jDTqfLH3lSh6JWSbKmqhatEUU/PjKyI
-# 5ogJNGLEeEWDECBCuytbpEweZYCCvZDKunU9cu4GUNN6Fdg2AMQ3VYGlbnj2R9TW
-# Og2q/IB2Wp3HwZZJ2frxhROwJnhqfn9b3qM9Q3kiCwMrUlgVirqXJDhZYy8p+V/I
-# B0IaJwSlFDyMs7NfY/k+cD+TQyF7mzVA3kuqphiXYV7NUCpvZHszJUcmX4g0Xbpq
-# 5PEpjynLjcRz02qcc0uPuKmAYYX7Mi+/OrKbpwvWBD7iIucD/2eINoyWNViStBN4
-# seekeOa4w4ZF7f2CX0Z07QxzWXWBxP8Exxv74ZS25m/wrkQsUWKmZN+SDCWMtv2r
-# Hlb7372IpIvlxwHedBfq2n6k4lUOBHUDWq5rSC+WPI4ayq1++ufR/XU2sc1oL64S
-# VKjBC235BHORM5hjoWGDy7jjMv06Ilj7/VBYN1olMJwUQTONlBauelvex8ufezeJ
-# N5QPqmZzzpiCrykaksVTh7avirs1RqwzXWqu/w==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIG09cfux
+# xGwwuqBctzdFD+XFLJxLCsltR/Zy3NCkUKqmMAsGCSqGSIb3DQEBAQSCAgAN89uI
+# a36vKoY3rJ5dPDZ0dl/ZXWPIgG1wHN5XXeQCFqpoJqKeyd8hZLCAzAXFr4LGcHSB
+# Vp+2VfzpRUhJElMObnhfRlLv2rw24kxv9Ls4yFu2l5Qu0fTwZLJIBXTXImpRlWRz
+# 67crq8lLRQOyPjlqLE6OC58XQSHbgEIT6ewmxRYQdfQxIzDO+RaTVjPHgE6HEYoA
+# +o79NRVX2AvgJb9jg8u7G5d/7lx63EAeWco5gSD1ySoZ2W380b1VYwYQ7itdOvwC
+# mLYLi1M5AMVBtUUvNjUqP89KPifGtQsDaBKmvxO3wBU954ObTKdtXJ6Wv0fTt6EQ
+# +3OecLAz43AWrKwMD3jDwNGLbbIAJe6+C4lEwqyimHUxdWIDEPFz3POIEdDZ7vkm
+# GUNAoZFzF3XM1kFPpcbsMNBlIBZI9xWuwOZsLq9XR8dfGM5oWNB3UV3degwVlH2Y
+# qexGrM8eK32MhK4ju3JZVl1hdbVcpa3jAk8ojWe15ax9WKMAhP1EC6gsbrU3bq0h
+# X4juUzIRBa85gxl3wmAizl3/edgnHFB+UMWFMJunHftPcFJmTsYBvaVICL1B3gyJ
+# c3//66wuUCieqHXE4qE4vrgZk6JiMKDThQ3t26Q4EGK18QZu+eJ/zNXYvLQnkETg
+# K+jrDPRPiG5oYlecdWI+HW8Qanb4tLg8ESXL/6ErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

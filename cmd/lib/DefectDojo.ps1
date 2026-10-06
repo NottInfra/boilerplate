@@ -2,11 +2,11 @@ class DefectDojo {
     [string]$Url
     [string]$Token
     [int]$EngagementId
-    [Config]$Project
+    [Yaml]$Project
     [Env]$Env
 
-    DefectDojo([Config]$Project, [Env]$Env) {
-        if (-not $Project -or -not $Project.Loaded) { throw '[!] DefectDojo requires project.cfg' }
+    DefectDojo([Yaml]$Project, [Env]$Env) {
+        if (-not $Project) { throw '[!] DefectDojo requires project.cfg' }
         if (-not $Env) { throw '[!] DefectDojo requires Env' }
         $this.Project = $Project
         $this.Env = $Env
@@ -19,7 +19,7 @@ class DefectDojo {
     [int] EnsureEngagement() {
         if ($this.EngagementId) { return $this.EngagementId }
         $staging = if ($this.Env.Name -eq 'live') { 'live' } else { 'test' }
-        $engagementName = "$($this.Project.Name)-$staging"
+        $engagementName = "$($this.Project.Require('project'))-$staging"
         $productId = $this.EnsureProduct()
         $existing = $this.FindEngagement($productId, $engagementName)
         if ($existing) {
@@ -36,7 +36,7 @@ class DefectDojo {
     [void] ImportScan([string]$Staging, [string]$ScanType, [string]$ReportFile, [string]$StepName) {
         if (-not $this.EngagementId) { throw '[!] DEFECT_DOJO_ENGAGEMENT_ID is required' }
         if (-not (Test-Path $ReportFile)) { throw "[!] report missing: $ReportFile" }
-        $title = "$($this.Project.Name)-$Staging-$StepName"
+        $title = "$($this.Project.Require('project'))-$Staging-$StepName"
         $form = @{
             scan_type         = $ScanType
             test_title        = $title
@@ -71,7 +71,7 @@ class DefectDojo {
             Authorization = "Token $($this.Token)"
             Accept        = 'application/json'
         }
-        $name = $this.Project.Name
+        $name = $this.Project.Require('project')
         $uri = "$($this.Url)/api/v2/products/?name=$([uri]::EscapeDataString($name))"
         $r = Invoke-RestMethod -Uri $uri -Headers $headers
         foreach ($p in $r.results) {
@@ -120,10 +120,10 @@ class DefectDojo {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDZveoolDtkiOXY
-# 3DuQzD4pSQxhrW1D+KLM5ezKWcTndqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBtF/1MQbhooQVs
+# SgFh2aPK7LdXqk+vVvnYn19oJLjLdqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
 # R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
 # ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
 # VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
@@ -141,20 +141,21 @@ class DefectDojo {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
-# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIPyiJFsQ
-# wVFhuhNA8sTQg5zY+t6qLjUvARNBwJA0kLFjMAsGCSqGSIb3DQEBAQSCAgCPhOaI
-# aDuYBHYFh/oXB2LbSgd3KIqokBsXOjWUmK1h1qtItGEij401B038mrPbX8OPMoY0
-# yMBTo6Y38Q94QUBTacx2TMwPtcqu4mtWl2jCV/ZBCNFnTsSo7TETrsxk7+Qf6D/3
-# C9xHJ5fUxgNaUu1hs7oH+yKyyRJNEP3PBPJjFZ2ddhfOxWq437qggYbWbLxPppqZ
-# XNRvX2zwyBsrq1CT0miru1vUUqpUakAa18suc/na3bVfwjyNVThD8hJSuqDSpO5y
-# LfIctjPxMnqE7fvxf2Z/jUlAMHD7HMLg3ar41uaJbLUY6werFAfwFqrx3ELcchlC
-# hBkCUSX3ZiF3rdHM1NAzszNr3FLcCQcuU6njWGb1DUSg+VfHZgCqfn8MLIMBT0qS
-# qFQvH0KMC140rImuAL39LVJEgK6yhEfp0oYPndSWUf2F+WSg1mdrFb9PoUPmS1EC
-# Nj49ZvR84I8qaaBPtpy7KeVKS3iREw+ag3aCWGvOfIjLN90xoue/Jov44TlZM9bg
-# koPXap52FD72dSa+56AjdM9UhQq/vLtYr5D3zKAcSBobNOEacDvKbp1ID+R12Buo
-# RgbIQULHq+4XcuB2zzZPlgL3jCiLFESovW916TbjrQiqF9pVvdqBKOrJA27RcwPk
-# xw44i8ssOkcr0vmBkpCRDOtS8WBFcbI0OGeNsg==
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIGMvhvwq
+# KsjOgEYihG25M1roov78EeuyS58XEx7ugRVIMAsGCSqGSIb3DQEBAQSCAgBCJ7Zr
+# 6IE2JcN3doDsM4RGyvDqh5YOXRgnyZPZJtLVG/D5ftTmE3PItxf2BJZVht/Z/IDE
+# 4/ozH1MTihlOEx2y7rKvpQQbNDsL77DrpBgAmAa88LBUQ0Xp32DFzzrS/4jYNlVQ
+# 1NLP/7ZJP5LJ4ntFOxmqIaux52gPVNDKy/rJDAz94DF4GLgdcRuRrxQ58ASR6+Fd
+# Kxcq4UdDQ9ZCg8tqjkrLk/dU7XgKl5K3/rsaOeBJ3cwtVZJghmXzO+lcxcXqT8T6
+# WECdWhoOePFglXAbdzDdSPF7wOII5OO6f2RAGi01ux9TE8bZiitVKcGuJNUL6P/m
+# ZHPV1LABujR/QPqU/01zYSAAjgocgnoPIcvKJjiEgiDsjDDUR9cm0bzWpciwe3WJ
+# yq+BiKfhP9EUNOWDyfrbfHn1J3wSnw0I0i7C4ceA7lloXik7BbZRwn7V2DchXygi
+# dABJ5RJS8N3Fj4tFIuARWxL2QcilyJ475Pp5oXE/c8POHNRf62IkA29Ml9cKo2R3
+# CAGwcSXZOk2qeEHWqTMHCQ6V4E8SiZ2u1mRHFrporL4EV5ZWgfo+2BTBvv22DRHK
+# wg0Y1KEtnXvZkHKh8zw+TDk3FwaQTIjRPv8SnfWhe0EBxIJMbv2jthMDjYQyk3ot
+# 3xyirIAydws0oXfOKZIJMxqR1hXhgQo5NOX286ErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
 # SIG # End signature block

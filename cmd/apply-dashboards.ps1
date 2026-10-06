@@ -2,20 +2,19 @@
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot/lib/Env.ps1"
-. "$PSScriptRoot/lib/Tuf.ps1"
-. "$PSScriptRoot/lib/Config.ps1"
+. "$PSScriptRoot/lib/Yaml.ps1"
 . "$PSScriptRoot/lib/OpenSearch.ps1"
 . "$PSScriptRoot/lib/OpenSearchDashboards.ps1"
 . "$PSScriptRoot/lib/Grafana.ps1"
 . "$PSScriptRoot/lib/DefectDojo.ps1"
 
 $Env = [Env]::new()
-$Project = [Config]::new('project.cfg')
+$Project = [Yaml]::new((Join-Path (Get-Location) 'project.cfg'))
 $os = $null
 try {
-    $Settings = [Config]::new('settings.cfg', [Tuf]::new())
+    $Settings = [Yaml]::new((Join-Path (Get-Location) 'settings.cfg'))
     $Env.BindConfig($Settings, $Project)
-    $os = [OpenSearch]::new($Env, $Project, "$($Project.Name)-cmd")
+    $os = [OpenSearch]::new($Env, $Project, "$($Project.Require('project'))-cmd")
     $os.Step('apply-dashboards', 'started')
 
     $dirs = @('dashboards/grafana', 'dashboards/opensearch')
@@ -28,10 +27,10 @@ try {
     }
     if (-not $hasAny) { throw '[!] No dashboards found under dashboards/{grafana,opensearch}/' }
 
-    Write-Host "[+] Applying dashboards (ENV=$($Env.Name), project=$($Project.Name))"
+    Write-Host "[+] Applying dashboards (ENV=$($Env.Name), project=$($Project.Require('project')))"
 
-    [OpenSearch]::new($Env, $Project, "$($Project.Name)-logging").Ensure()
-    [OpenSearch]::new($Env, $Project, "$($Project.Name)-cmd").Ensure()
+    [OpenSearch]::new($Env, $Project, "$($Project.Require('project'))-logging").Ensure()
+    [OpenSearch]::new($Env, $Project, "$($Project.Require('project'))-cmd").Ensure()
 
     if ((Get-ChildItem 'dashboards/opensearch' -Filter '*.ndjson' -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 })) {
         [OpenSearchDashboards]::new($Project, $Env).ImportDir('dashboards/opensearch')
@@ -59,8 +58,8 @@ try {
 }
 catch {
     if ($_.Exception.Message -like '*UNSIGNED_SETTINGS_CFG*') {
-        if (-not $os) { $os = [OpenSearch]::new($Env, $Project, "$($Project.Name)-cmd") }
-        if (-not $os.Url) { $os.Url = $Project.PinnedOpenSearchPublicUrl.TrimEnd('/') }
+        if (-not $os) { $os = [OpenSearch]::new($Env, $Project, "$($Project.Require('project'))-cmd") }
+        if (-not $os.Url) { $os.Url = $os.PinnedPublicUrl.TrimEnd('/') }
         $os.Step('apply-dashboards', 'failed', @{ event = 'unsigned_settings_cfg'; error = $_.Exception.Message })
     }
     elseif ($os) {
@@ -70,7 +69,7 @@ catch {
 }
 
 # SIG # Begin signature block
-# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# MIIHBQYJKoZIhvcNAQcCoIIG9jCCBvICAQMxDTALBglghkgBZQMEAgEwewYKKwYB
 # BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
 # KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCO5RZOAJatKLyY
 # XmBa1wogzIVqVfjCoJosvIMOaltjZqCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
@@ -91,7 +90,7 @@ catch {
 # AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
 # MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
 # ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
-# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# ezJPirlP+IxtyaFnz10xggMHMIIDAwIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
 # YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
 # EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
 # KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIERYo5Tu
@@ -106,5 +105,46 @@ catch {
 # 82YI9p2V0AfaHwIrR6PpVOn1w7OeF5azqza5ELguCqOfSpZwKffpMSOI/42mJ6Qa
 # 2dc71FURQ9nST1n8UihFDeIU1YoZvB/vGWp0ASJoGS0oT2dQtlUiS7AwlnflEz4Z
 # szhzKFj1NcWjKCWyUugB6xBZVB98A+rLNtLokS2kYv7W0FepKlW6a/oqo8KKC3W0
-# A0et1LiSXJjieR2xDWAVFCocaakQ2pE1oJXfMg==
+# A0et1LiSXJjieR2xDWAVFCocaakQ2pE1oJXfMqErMCkGDCsGAQQBgoxMCgABAzEZ
+# BBdodHRwczovL25vdHRpbmZyYS5jby51aw==
+# SIG # End signature block
+
+# SIG # Begin signature block
+# MIIG2AYJKoZIhvcNAQcCoIIGyTCCBsUCAQMxDTALBglghkgBZQMEAgEwewYKKwYB
+# BAGCNwIBBKBtBGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCb1OtfYAqke9jh
+# b8GUGdKZyirCiY6f98uRjdJ+MtB9VaCCA1QwggNQMIIC9qADAgECAhEAn7eSCz3E
+# R/b0C5YxX/PjyDAKBggqhkjOPQQDAjAgMR4wHAYDVQQDExVOb3R0SW5mcmEgSW50
+# ZXJuYWwgQ0EwHhcNMjYwNzI3MjM0NDE1WhcNMjcwNzI3MjM0NDE1WjAlMSMwIQYD
+# VQQDExpOT1RUSU5GUkEgTElNSVRFRCBTT0ZUV0FSRTCCAiIwDQYJKoZIhvcNAQEB
+# BQADggIPADCCAgoCggIBAKRICuzioM/pLsdWW/uV0Hl7Y5FHNBPTEl3X/oGK+BAi
+# kC0es0CLXLykWpsJ/f9ldyyHlMzwUR1zEIhCZXEyo+uqQ8B1yWke7rQ4wkWE6/DU
+# htCLSiySkf/KB389/ptcEM+jJ48DQGi0+8K6QQ02vEOAQKLfxA4Rrnl5BYY+nnNs
+# Rpa+B6K40i/aFAsc60gbG3SGQePzuHHbPl6CE5AzQNY2WBpY77aonZ830RM5AsS4
+# Xe7P8cDJ7Gahw6ZjLEriCaR3xBytPy63RiZdW8upuQ0AIFz4/8GVRYuOJ1wGeU53
+# b0OZhj/6Z481Zry0VcBvGfHidIVkQKbWZQ2QWdkSBbSAIR92tKpSqSDy4VQYQ4RO
+# l3NY/QHkJsAl6EGzQ514P+qUzkSyxgSNHZFCknqTu6gXtemaCUC7z/eLZDibw+mg
+# yAuyLTZoeAlDPaHT4FOPfB8pn6UuGb/LwJwFlBHGAkaYlfAkx3BJYIsQpfPwKxfN
+# Ufds8LMYArJlFZJnJ1EmJSE+qIu0cN7SyuFDAdGszrVjltYswzAfhE0NRQQm4HiG
+# CWG9ZxDD1TxbhvEecgJCOMy/dZCcjEEzq4wZxSVPicn0QowKDWHy1GpgdR3pT+Ok
+# zuIBpfEeXW5uW9e0yoOzwOnh1XCRp8hv+B4l4RvTEl3ccZ+PcmAcsLHODqvW4vmT
+# AgMBAAGjQTA/MA4GA1UdDwEB/wQEAwIFoDAMBgNVHRMBAf8EAjAAMB8GA1UdIwQY
+# MBaAFKF88Blhy5xs0hQfn4medNFL3FoXMAoGCCqGSM49BAMCA0gAMEUCIQDwlWDa
+# ojXZG8h5O2XzW/IG9h+GUKAmx8SCd7NuhB0SUAIgJkQlleqNoGkPuDyi08MuVI36
+# ezJPirlP+IxtyaFnz10xggLaMIIC1gIBATA1MCAxHjAcBgNVBAMTFU5vdHRJbmZy
+# YSBJbnRlcm5hbCBDQQIRAJ+3kgs9xEf29AuWMV/z48gwCwYJYIZIAWUDBAIBoHww
+# EAYKKwYBBAGCNwIBDDECMAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYK
+# KwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwLwYJKoZIhvcNAQkEMSIEIGofHCqj
+# YU/+0cAGxD5OeywEhimMALTovFUKhuVmsafHMAsGCSqGSIb3DQEBAQSCAgBRRn1m
+# WLNQy7yOPkdBfQ0HJAqvWmm6kLZUVSIWY00++moXoOTPXN3baDVDOZYN5Klel+BL
+# 65/JFSplNkraiJzdym0Lhz73bxzBF6sQZDqTJa+c0hHm/diKEvJdPCVc21zDNle6
+# iuVqWY4gqXrdRXj1c8tFlkJHS4DyNq8mS4s7yCeG2X/16XYqzE7RVBJVK712i3OD
+# OG2zMiTeyfHxnHYrMBqb7Kq/9s3hdySYBY8Bg/gTLAqEty4TQZ5v0UDwzPC4ISjE
+# asClOuOqOZzrAqh7+iCFjoOT3c3w20q6Sf73d14mU31NZWKDuc1RsbkdRP68L6Vm
+# T9UI8BmhHMvWaL/+guswEvHULFvh/Z3IPjZTaDEpJ+9+TviOz/e9D1TacycUpwMB
+# 4gdg/Cocj3QQwtmk88KB7q7BghX3mUb0LKtxisoH65DOGkzFmbsK+J5WbBnlAnvI
+# SC7OcHQB4acqFyH2z3dHXu9gtKle/OlXm8KdI9AB2Z8+s8e6p8X4pgV1tQzkW49u
+# cSBca+7Lg6LIB4xxVEwEbb3lrsbEG3L4Xko8u849Yk/jjIfyyqUbMlTQOmlEUsmh
+# IB6n+thZywBhOrPl09JN1fluM0ZmxtgBoN/K1hrmVrYRO47DYEQpCQXJt8j63J+A
+# MqRuupZSQrF0yTtx3dGiKpSCxGp3SoCVGgf4Xw==
 # SIG # End signature block
