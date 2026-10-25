@@ -1,0 +1,200 @@
+---
+description: Integrate this service as a msg-gway client (session files, HTTP commands, Kafka inbound)
+alwaysApply: false
+---
+
+# msg-gway client
+
+When this rule is invoked, wire **this** service to msg-gway: hand over **session files**, drive I/O over HTTP, consume inbound from Kafka. Language-agnostic.
+
+This service must **not** run TDLib, WhatsMeow, or a Matrix sync loop. The gateway does. Do not put `TELEGRAM_API_ID` / `HASH` here. One Bearer credential per calling service.
+
+## Surface
+
+```text
+HTTPS  https://messaging.nottinfra.co.uk
+Auth   Authorization: Bearer {credential-id}.{secret}
+Topic  msg-gway.{credential-id}
+```
+
+`MSG_GWAY_URL`, `MSG_GWAY_TOKEN`, `KAFKA_URL` (from `settings.cfg` `ENDPOINTS.KAFKA` via `NETWORK`). Optional `KAFKA_PRIVATE_KEY` if sessions use `public_key`.
+
+Mint the token in the **msg-gway** repo (`./cmd/service/create-credential.ps1 {this-project}`), store it in **this** service’s Vault.
+
+Commands: JSON in / JSON out. `{ "ok": false }` on 200 is a failed command (no error object). 401/429 also `{ "ok": false }`. Media GET is **raw bytes**.
+
+W3C trace context: send `traceparent` (optional `tracestate`, `baggage`) on command HTTP. The gateway continues that trace. Kafka records carry the same fields as **record headers**, never in the Event/envelope JSON. `command_url` POSTs from the gateway include those HTTP headers. Extract on consume; ignore if missing. Telegram/WhatsApp inbound starts a **new** trace at the gateway, then injects it on Kafka.
+
+Layout in this service:
+
+```text
+src/utils/msg-gway        # HTTP client + envelope Open
+src/bg-services/msg-gway  # Kafka consumer
+src/use-cases/msg-gway    # HandleEvent + outbound helpers
+```
+
+---
+
+## Session files (`POST /v1/sessions` → `files`)
+
+The integration interface **is** the file map. Keys are **relative paths** (no `..`, no absolute). Values are **standard Base64** of the file bytes (not base64url). The gateway writes them under its session dir and starts the driver. The row is **not stored** until Start reports authorized → otherwise `{ "ok": false }`.
+
+```json
+{
+  "platform": "telegram | whatsapp | matrix | custom",
+  "files": { "relative/path": "<standard-base64>" },
+  "public_key": "",
+  "listen": { "chats": ["*"], "usernames": [], "secret_chats": true }
+}
+```
+
+Success: `{ "ok": true, "session_id": "uuid", "platform": "…", "listen": {…}, "dir": "…" }`. Persist `session_id` in **this** service (DB / config). Reuse it after **this** container restarts — do **not** `POST /v1/sessions` again for the same store.
+
+The gateway keeps the session row and files across **its** restarts and re-attaches the driver (`Restore`). Incoming continues onto the same Kafka topic; outbound still uses the same `session_id`. Only `DELETE /v1/sessions` tears it down. Re-uploading the same Telegram/WhatsApp store while it is already live logs the device out.
+
+`listen` omitted → all chats (DMs **and** groups). `public_key` (RSA PEM) → Kafka values sealed (see Envelope). Omit for plaintext.
+
+`listen.secret_chats: true` → Kafka **only** events with `secret: true` (Telegram secret chats). `false` drops secret events. Omit the field → both. WhatsApp/Matrix events are never `secret`, so `true` silences them.
+
+**Never** start two processes against the same Telegram/WhatsApp store (`AUTH_KEY_DUPLICATED` / device logged out). Treat `files` as secrets (do not log). Copy stores only while the source client is **disconnected**.
+
+### `telegram` — official TDLib directory
+
+Gateway uses `tdl` + `prebuilt-tdlib`. If `tdlib-db/` is present it is `databaseDirectory`; otherwise the session root. If `tdlib-files/` is present it is `filesDirectory`; otherwise `files/`.
+
+Start is authorized when **any** of these names exist **anywhere** in the uploaded tree: `td.binlog`, `db.sqlite`, `db.sqlite-wal`. An empty / QR-pending / logged-out store → `{ok:false}`.
+
+Upload the **whole** logged-in TDLib dir, including WAL, so SQLite is consistent:
+
+```json
+"files": {
+  "tdlib-db/td.binlog": "<b64>",
+  "tdlib-db/db.sqlite": "<b64>",
+  "tdlib-db/db.sqlite-wal": "<b64>",
+  "tdlib-db/db.sqlite-shm": "<b64>"
+}
+```
+
+Also valid: `td.binlog` / `db.sqlite` at the map root (no `tdlib-db/` prefix). Optional media cache: `tdlib-files/…` or `files/…`. Do not rely on cache files for auth.
+
+`chat_id` is the Telegram chat id **as a decimal string** (user, basic group, or `-100…` supergroup). Groups the account is in are published the same as DMs unless `listen.chats` / `secret_chats` filters them. `params.username` (`@user` or `user`) or `params.secret_chat: true` for secret chats. Outbound media: `params.path` if the file is already on the gateway session disk, or **`params.data`** (standard base64 of the bytes) plus `params.filename` when the caller cannot see that disk — Telegram writes it under `files/` then sends.
+
+### `whatsapp` — WhatsMeow SQLite
+
+Gateway opens `sqlstore` on the first matching file, then `GetFirstDevice`. Authorized only if `client.Store.ID != nil` (paired device). Empty QR database → `{ok:false}`.
+
+Preferred key: **`whatsmeow.db`** at the map root. Also accepted, in order: `session.db`, `store.db`, `whatsapp.db`, else the first `*.db` in the tree.
+
+```json
+"files": {
+  "whatsmeow.db": "<b64>",
+  "whatsmeow.db-wal": "<b64>",
+  "whatsmeow.db-shm": "<b64>"
+}
+```
+
+Include `-wal` / `-shm` siblings when they exist. After upload, do not keep another WhatsMeow client open on that same sqlite.
+
+`chat_id` is a JID: `447xxxxxxxxx@s.whatsapp.net` or `…@lid` (DM), **`…@g.us`** (group). Groups the paired device is in are listened and can be sent to with that JID. `params.phone_number` (digits) only for DMs when you do not have a JID. WhatsApp outbound media still needs **`params.path`** on the gateway disk (`params.data` is Telegram-only). `delete_for_everyone` on unsend. `DELETE /v1/chats` = app-state delete + archive.
+
+### `matrix`
+
+JSON with `homeserver`, `access_token`, and `user_id`. Optional `device_id`. Filename **`session.json`** or **`matrix.json`** (any `.json` in the dir that has those fields also works). Start calls `GET /_matrix/client/v3/account/whoami`.
+
+```json
+"files": {
+  "session.json": "<b64 of {\"homeserver\":\"https://matrix.example\",\"user_id\":\"@u:example\",\"access_token\":\"syt_…\",\"device_id\":\"…\"}>"
+}
+```
+
+`chat_id` is a room id (`!…:server`).
+
+### `custom`
+
+Optional JSON `{ "command_url": "https://this-service/internal/msg-gway" }` as `session.json` / `custom.json`. Start **always** succeeds. If `command_url` is set, the gateway POSTs `{ok}` JSON to `{command_url}/{send|edit|read|delete_message|create_chat|delete_chat}` with the same fields as the HTTP commands. If omitted, the session is **ingest-only** (`POST /v1/ingest` from this service).
+
+---
+
+## Commands
+
+Bearer on every call. `{ok:false}` = stop.
+
+| Method | Path | Body |
+|--------|------|------|
+| `POST` | `/v1/sessions` | `platform`, `files`, `public_key?`, `listen?` |
+| `DELETE` | `/v1/sessions` | `session_id` |
+| `POST` | `/v1/messages` | send; **edit** if `message_id` **and** `chat_id` set |
+| `PATCH` / `POST /v1/messages/edit` | | `session_id`, `chat_id`, `message_id`, `content` |
+| `DELETE` / `POST /v1/messages/delete` | | `session_id`, `chat_id?`, `message_id?`, `from?`, `delete_for_everyone?` |
+| `POST` | `/v1/messages/read` | `session_id`, `chat_id`, `message_id` or `message_ids[]`, `from?` |
+| `POST` | `/v1/chats` | `session_id`, `chat_id?`, `params?` → `{ ok, chat_id }` |
+| `DELETE` | `/v1/chats` | `session_id`, `chat_id` |
+| `POST` | `/v1/ingest` | Event JSON (`session_id` required, this credential) |
+| `GET` | `/v1/media` | query `session_id`, `message_id` → bytes |
+
+Send `params`: `username`, `phone_number`, `secret_chat`, `kind` (`image` `video` `file` `voice` `gif` `location` `contact`), `path`, **`data`** (standard base64 media bytes; Telegram), `filename`, `mime`, `lat`, `lng`, `name`, `phone`, `width`, `height`, `thumb_data`, `thumb_width`, `thumb_height`.
+
+Telegram photos use `kind: "image"`. `data` is a **baseline JPEG** (not progressive, not mozjpeg). `width` and `height` are that JPEG’s pixel size; the gateway sets them on TDLib `inputPhoto`. `thumb_data` is a small baseline JPEG whose longest side is at most 320, with `thumb_width` and `thumb_height` matching that file. Secret chats show this thumbnail to the other party. Without it the chat preview and Telegram’s viewer stay blank, while saving the file and opening it in Photos can still look fine.
+
+`GET /healthz` (no auth) → `{ "ok": true, "redis": "ok"|"down" }`. 401 media empty; 404 media empty; 429 `{ok:false}`.
+
+---
+
+## Kafka inbound
+
+Consume **only** `msg-gway.{credential-id}`. Group `{project}-msg-gway` — **stable** across this service’s restarts so Kafka offsets resume and events are not skipped or reprocessed from earliest. Message key = `session_id`. Record headers may include W3C `traceparent` / `tracestate` / `baggage` — extract into the consumer span; do not look for them in the JSON body.
+
+If the JSON has `"alg":"rsa-oaep-sha256+aes-256-gcm"`, it is an envelope (session was created with `public_key`). Else it is an Event.
+
+### Event
+
+```json
+{
+  "session_id": "uuid",
+  "platform": "telegram",
+  "chat_id": "…",
+  "message_id": "…",
+  "old_message_id": "",
+  "from": "…",
+  "username": "",
+  "content": "",
+  "kind": "",
+  "mime": "",
+  "filename": "",
+  "lat": 0, "lng": 0, "name": "", "phone": "",
+  "secret": false,
+  "outgoing": false,
+  "op": "message",
+  "ts": "2026-10-24T18:00:00Z"
+}
+```
+
+`op`: `message` | `edit` | `delete` | `chat` | `delete_chat`. Media: `kind`/`mime`/`filename` then `GET /v1/media`. `outgoing` = this account sent it. `secret` = Telegram secret chat.
+
+### Envelope
+
+```json
+{ "v": 1, "alg": "rsa-oaep-sha256+aes-256-gcm", "key": "<b64>", "nonce": "<b64>", "ct": "<b64>" }
+```
+
+`KAFKA_PRIVATE_KEY` = PKCS#1 or PKCS#8 RSA PEM matching `public_key`. RSA-OAEP-SHA256 unwrap `key` → 32-byte AES key; AES-256-GCM open `ct` with `nonce` (no AAD) → Event JSON. Wrong key → drop, do not parse as Event.
+
+---
+
+## HandleEvent (defaults)
+
+1. Ignore `outgoing: true` unless the product must echo.
+2. `op=message` with `kind` → fetch media before fan-out.
+3. `edit` / `delete` / `delete_chat` → update local state by session + chat + message id.
+4. Outbound only via the HTTP helpers.
+
+## Checklist
+
+1. Own HTTP client + Kafka listener; no TDLib/WhatsMeow/Matrix SDK in this service.
+2. `files` is the session contract — full logged-in TDLib dir or WhatsMeow sqlite (+ wal), never empty placeholders.
+3. One credential; topic `msg-gway.{credential id}` only.
+4. `{ok:false}` is the error contract.
+5. Open envelopes only when `alg` matches.
+6. One live gateway process per Telegram/WhatsApp store.
+7. Continue W3C traces from HTTP `traceparent` and Kafka record headers.
+8. Persist `session_id` and Kafka group `{project}-msg-gway` across restarts; do not recreate the gateway session.

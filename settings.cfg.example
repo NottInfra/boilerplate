@@ -62,6 +62,9 @@ ONPREM:
     REDIS:
       CLUSTER:
       PUBLIC:
+    KAFKA:
+      CLUSTER:
+      PUBLIC:
     REGISTRY:
       CLUSTER:
       PUBLIC:
