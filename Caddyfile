@@ -1,25 +1,31 @@
+(common) {
+	encode gzip zstd
+
+	header {
+		defer
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://cdn.DOMAIN; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}
+
 www.DOMAIN {
+	import common
 	redir https://DOMAIN{uri} permanent
 }
 
 DOMAIN {
-	encode gzip zstd
-
+	import common
 	reverse_proxy localhost:PORT {
-		header_up Host {host}
 		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-For {remote_host}
-		header_up X-Forwarded-Proto {scheme}
 	}
 }
 
 test.DOMAIN {
-	encode gzip zstd
-
+	import common
 	reverse_proxy localhost:PORT {
-		header_up Host {host}
 		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-For {remote_host}
-		header_up X-Forwarded-Proto {scheme}
 	}
 }

@@ -44,8 +44,9 @@ Do not invent alternate prefixes; the bot only scans `broadcast:services:*` and 
 Own heartbeat with Redis presence touch + project + `24h` interval:
 
 1. Touch once on start
-2. Tick every ~24h for the process lifetime
-3. Stop when the process context is cancelled
+2. If `TouchPresence` fails and the process context is still live, **do not exit**. Retry every **5 minutes** until a touch succeeds, then resume the 24h cadence. A Redis/DNS blip at boot must not leave the service off the Telegram picker while it is still draining the queue.
+3. After a successful touch, tick every ~24h for the process lifetime
+4. Stop when the process context is cancelled
 
 ## Broadcast listener bg-service
 
@@ -93,6 +94,6 @@ Deserialize job JSON; apply prompt-specific handling. Default Telegram fan-out r
 1. Same Redis as broadcast-svc (`REDIS_URL`).
 2. Own heartbeat + broadcast listener under `src/bg-services` (not shared with broadcast-svc).
 3. Presence key / queue name = `project.cfg` → `project`.
-4. Start both background workers from the composition root.
+4. Start both background workers from the composition root. Heartbeat retries every 5 minutes after a failed touch until Redis is back.
 5. No alternate key prefixes.
 6. Fan-out with `job.html` + `parse_mode=HTML`; never escape `html`; only escape plain `text` as fallback.
