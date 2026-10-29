@@ -1,0 +1,96 @@
+---
+description: Integrate this service as an ingest-svc consumer (register a source, consume its feed)
+alwaysApply: false
+---
+
+# ingest-svc consumer
+
+When this rule is invoked, wire **this** service to ingest-svc. ingest-svc is the shared scrape / collect layer: one place that fetches and watches sources so every other service does not run its own crawlers or hold extra sessions.
+
+This service must **not** scrape the source itself. Register it with ingest-svc and consume the feed. ingest-svc already collected the page, tree, or messages.
+
+## Surface
+
+```text
+HTTP   {INGEST_URL}          Authorization: Bearer {INGEST_TOKEN}
+Kafka  topic on the record (`topic`)
+```
+
+`INGEST_URL`, `INGEST_TOKEN`, `KAFKA_URL` (`settings.cfg` `ENDPOINTS.INGEST` / `ENDPOINTS.KAFKA` via `NETWORK`). Empty `INGEST_TOKEN` → ingest HTTP is open.
+
+Cluster: `http://ingest-svc.ingest-svc.svc.cluster.local:8080`. Public: `https://ingest.nottinfra.co.uk`.
+
+ingest-svc owns what to fetch, how often, and when it changed. An unchanged source does not publish. A Kafka record means new data (or a retry).
+
+**The register HTTP reply and the Kafka record are the same event.** Apply it once per `content_hash`. Do not treat them as two jobs.
+
+W3C `traceparent` / `tracestate` / `baggage` are Kafka **record headers**, not JSON fields.
+
+Layout in this service:
+
+```text
+src/utils/ingest          # HTTP client (register, latest)
+src/bg-services/ingest    # Kafka consumer
+src/use-cases/ingest      # handle record (per subscriber)
+```
+
+---
+
+## Subscribe
+
+ingest-svc manages the source. This service only registers interest and keeps a local subscriber row (who asked, canonical `url`, `kind`, `topic`, `content_hash`) until they leave.
+
+```http
+POST {INGEST_URL}/v1/sources
+Authorization: Bearer {INGEST_TOKEN}
+Content-Type: application/json
+
+{"url":"<source>"}
+```
+
+`GET {INGEST_URL}/v1/sources?url=` is the latest record. `GET /v1/sources` lists sources. `DELETE /v1/sources?url=` stops ingest’s watch — only when nobody local still wants it.
+
+On startup: `GET` latest for each stored URL, apply if `content_hash` changed, then consume from the **latest** offset. Group `{project}-ingest`, stable. Message key is the canonical URL. Prefer `topic` on the record over recomputing it.
+
+---
+
+## Sessions and live chats
+
+If this service needs a listener on a Telegram group or channel, **send that link to ingest-svc**. Do not burn another user session here, and **do not upload session files to ingest-svc**. ingest-svc talks to msg-gway itself.
+
+Live posts arrive as `{ "url", "kind", "topic", "message": { "id", "from", "text", "date" } }`. A backfill uses `messages` (array) instead of `message`. That is not a catalogue — this service decides what to do with the text.
+
+---
+
+## Record
+
+```json
+{
+  "url": "https://…",
+  "kind": "…",
+  "topic": "…",
+  "content_hash": "…",
+  "changed": true,
+  "changed_at": "2026-10-25T16:00:00Z"
+}
+```
+
+| `kind` | Extra fields | This service |
+|--------|----------------|--------------|
+| page / tree | `text` and/or `catalogue` | Use ingest’s `catalogue`, or run **this** service’s own model on the streamed `text` / products JSON. Do not fetch the source. |
+| chat | `messages` / `message` | Inspect text here. Do not run a catalogue prompt. |
+
+`catalogue.categories` and `catalogue.products` are objects. Names are the keys (keep emoji). A product is `{ "price": "..." }` or `{ "variants": { "<name>": { "price": "..." } } }`, never both. Unheaded products sit on `products`.
+
+Skip side effects when `content_hash` already matches.
+
+---
+
+## Checklist
+
+1. Do not scrape. Do not hold a collect session. Do not send session files to ingest-svc.
+2. Register interest; ingest-svc manages the source. Remain subscribed locally per user + URL.
+3. HTTP reply and Kafka record are one event — once per `content_hash`.
+4. Startup: `GET` latest, then latest-offset consume. Group `{project}-ingest`.
+5. Group/channel listen → register the chat with ingest-svc; ingest-svc uses the gateway.
+6. Trace context from Kafka headers.

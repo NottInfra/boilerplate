@@ -77,7 +77,9 @@ Upload the **whole** logged-in TDLib dir, including WAL, so SQLite is consistent
 
 Also valid: `td.binlog` / `db.sqlite` at the map root (no `tdlib-db/` prefix). Optional media cache: `tdlib-files/…` or `files/…`. Do not rely on cache files for auth.
 
-`chat_id` is the Telegram chat id **as a decimal string** (user, basic group, or `-100…` supergroup). Groups the account is in are published the same as DMs unless `listen.chats` / `secret_chats` filters them. `params.username` (`@user` or `user`) or `params.secret_chat: true` for secret chats. Outbound media: `params.path` if the file is already on the gateway session disk, or **`params.data`** (standard base64 of the bytes) plus `params.filename` when the caller cannot see that disk — Telegram writes it under `files/` then sends.
+`chat_id` is the Telegram chat id **as a decimal string** (user, basic group, or `-100…` supergroup). Groups the account is in are published the same as DMs unless `listen.chats` / `secret_chats` filters them. `params.username` (`@user` or `user`) or `params.secret_chat: true` + `params.user_id` (Telegram user id) for secret chats. Outbound media: `params.path` if the file is already on the gateway session disk, or **`params.data`** (standard base64 of the bytes) plus `params.filename` when the caller cannot see that disk — Telegram writes it under `files/` then sends.
+
+**Secret chat soak (Telegram only):** send (or create) may return `{ok:true}` while the handshake is still pending. The gateway keeps **at most one** pending secret chat per peer, queues outbound payloads in Postgres + session PVC (`outbound/{id}/`), and sends when TDLib reaches Ready. Kafka `op=chat` for secret chats is emitted **only on Ready** (not pending). `secretChatStateClosed` / send errors fail the queue **immediately**. Only “still waiting for accept” uses TTL (default **60 days**, `OUTBOUND_QUEUE_TTL`). **No** auto-recreate; call send again if the product still wants to talk. WhatsApp has no equivalent.
 
 ### `whatsapp` — WhatsMeow SQLite
 
