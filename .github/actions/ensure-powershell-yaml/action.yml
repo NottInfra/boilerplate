@@ -1,0 +1,23 @@
+name: Ensure powershell-yaml
+description: Put vendored release/modules on PSModulePath so Import-Module powershell-yaml succeeds
+runs:
+  using: composite
+  steps:
+    - name: Prepend vendored modules to PSModulePath
+      shell: bash
+      run: |
+        modules="$GITHUB_WORKSPACE/release/modules"
+        if [ ! -d "$modules/powershell-yaml" ]; then
+          echo "::error::missing vendored module at $modules/powershell-yaml"
+          exit 1
+        fi
+        sep=':'
+        case "$(uname -s)" in
+          MINGW*|MSYS*|CYGWIN*|Windows_NT) sep=';' ;;
+        esac
+        if [ -n "${PSModulePath:-}" ]; then
+          echo "PSModulePath=${modules}${sep}${PSModulePath}" >> "$GITHUB_ENV"
+        else
+          echo "PSModulePath=${modules}" >> "$GITHUB_ENV"
+        fi
+        echo "PSModulePath includes $modules"
