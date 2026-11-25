@@ -51,22 +51,29 @@ jobs:
       # TUF-signed settings.cfg. Self-hosted runners currently fail those
       # prerequisites (missing module / Vault DNS :80 / gitignored settings.cfg),
       # which blocked the gitleaks quality gate before any secret scan ran.
-      # Match the pre-Yaml scanner image and mount layout from release/lib/Gitleaks.ps1.
+      # DinD on these k8s runners cannot see /runner-work bind mounts (same as
+      # Makefile test-docker), so stream the tree into the container.
       - name: Run gitleaks
         run: |
           set -euo pipefail
           src="${GITHUB_WORKSPACE}"
-          mount_root="$(dirname "$src")"
           report_dir="${src}/artifacts/release-scan"
           mkdir -p "$report_dir"
           report="${report_dir}/gitleaks.json"
-          echo "[+] gitleaks workdir=$src mount=$mount_root report=$report"
-          docker run --rm \
+          echo "[+] gitleaks workdir=$src (tar-stream into DinD)"
+          # docker's exit status is what matters; tar is only the feeder.
+          set +e
+          tar -C "$src" --exclude=./artifacts -cf - . | docker run --rm -i \
             -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 \
-            -v "${mount_root}:${mount_root}" \
-            -w "$src" \
+            --entrypoint /bin/sh \
             zricethezav/gitleaks:v8.21.2 \
-            detect --source="$src" --report-path="$report" --report-format=json --no-banner --config="$src/.gitleaks.toml"
+            -c 'mkdir -p /repo && tar -xf - -C /repo && gitleaks detect --source=/repo --no-banner --config=/repo/.gitleaks.toml --report-path=/tmp/gitleaks.json --report-format=json; ec=$?; if [ -f /tmp/gitleaks.json ]; then cat /tmp/gitleaks.json; else echo "[]"; fi; exit $ec' \
+            > "$report"
+          ec=$?
+          set -e
+          if [ ! -s "$report" ]; then echo '[]' > "$report"; fi
+          echo "[+] gitleaks report=$report exit=$ec"
+          exit "$ec"
 
   unit-test:
     needs: gitleaks
