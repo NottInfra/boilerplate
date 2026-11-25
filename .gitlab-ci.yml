@@ -31,6 +31,8 @@ stages:
   before_script:
     - apt-get update -qq
     - apt-get install -y -qq git make
+    # Vendored under release/modules so Import-Module powershell-yaml works offline
+    - export PSModulePath="${CI_PROJECT_DIR}/release/modules${PSModulePath:+:$PSModulePath}"
 
 .ci:step:
   extends: .ci:setup
