@@ -3,10 +3,11 @@
 ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 build:
-	docker build -t fantastic-beasts "$(ROOT)"
+	docker build -t boilerplate "$(ROOT)"
 
 test:
 	cd "$(ROOT)src" && go build -o /dev/null .
 
 test-docker:
-	docker run --rm -v "$(ROOT)src:/src" -w /src golang:1.25-alpine go test ./...
+	# DinD on k8s runners often can't see /runner-work bind mounts; stream sources in.
+	tar -C "$(ROOT)src" -cf - . | docker run --rm -i -w /src golang:1.25-alpine sh -c 'tar -xf - && go test ./...' 

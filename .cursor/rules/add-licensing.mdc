@@ -1,0 +1,147 @@
+---
+description: Integrate this service as a licensing-svc client (authorise + usage events)
+alwaysApply: false
+---
+
+# licensing-svc client
+
+When this rule is invoked, wire **this** service to licensing-svc for tenant authorisation and usage event recording. Language-agnostic.
+
+This service must **not** connect to the licensing database, evaluate policy YAML locally, or talk to Keycloak for ordinary checks. One API key per calling service. Store the key in **this** service’s Vault / env — never in source control.
+
+## Surface
+
+```text
+HTTPS  https://licensing.nottinfra.co.uk   # or LICENSING_URL from settings / env
+Auth   Authorization: Bearer {api_key}
+```
+
+`LICENSING_URL`, `LICENSING_API_KEY` (from Vault). Optional `LICENSING_TIMEOUT` (default a few seconds).
+
+Layout in this service:
+
+```text
+src/utils/licensing     # HTTP client (Check + Push)
+src/use-cases/…         # call the client before privileged work / after successful work
+```
+
+Composition root: construct the client once and inject it into use cases that need gating or metering.
+
+---
+
+## Auth
+
+Every call (except the licensing service’s own `/health` / `/ready`) requires:
+
+```http
+Authorization: Bearer lk_<prefix>.<secret>
+```
+
+The licensing service establishes identity from the key. **Never** trust a `service` value in your own request body as proof of identity — omit `service` (or send your own id) and let the server bind the caller.
+
+Do not log the API key or raw `meta` that may contain secrets.
+
+---
+
+## Check — `POST /v1/authorize`
+
+Ask whether this service may perform an action for a tenant (and optional accounts) **before** doing the work.
+
+```json
+{
+  "service": null,
+  "tenant": "acme",
+  "accounts": ["account-001"],
+  "action": "invoice.create",
+  "meta": {}
+}
+```
+
+Scopes accept a string, an array of strings, or `null`:
+
+| Field | Semantics |
+|-------|-----------|
+| `service` | Omit/`null` → authenticated caller. Do not send other services’ ids. |
+| `tenant` | **Required.** Single id or list (AND). |
+| `accounts` | Omit/`null` → tenant-scoped. Non-empty → every account must be entitled. |
+| `action` | Dotted id, e.g. `invoice.create`. |
+| `meta` | Optional opaque object (non-sensitive). |
+
+Success `200`:
+
+```json
+{
+  "decision_id": "uuid",
+  "allowed": true,
+  "reason": "allowed by rule \"invoice.create\"",
+  "policy_id": "example-policy",
+  "policy_version": 1,
+  "action": "invoice.create",
+  "services": ["crm"],
+  "tenants": ["acme"],
+  "accounts": ["account-001"]
+}
+```
+
+Rules for this service:
+
+1. If `allowed` is false → **do not** perform the action; surface `reason` to ops/logs (not end-user secrets).
+2. Default on the server is **deny** when no rule matches.
+3. Keep `decision_id` / `policy_id` / `policy_version` if you will `Push` afterward.
+4. Time out and fail closed on network errors unless the product explicitly documents a break-glass path.
+
+---
+
+## Push — `POST /v1/events`
+
+Record that an action occurred. Independent of Check — do **not** treat Push as authorisation.
+
+```json
+{
+  "service": null,
+  "tenant": "acme",
+  "accounts": ["account-001"],
+  "action": "invoice.create",
+  "meta": { "invoice_id": "inv_123" },
+  "idempotency_key": "crm:inv_123:create",
+  "decision_id": "uuid-from-check",
+  "policy_id": "example-policy",
+  "policy_version": 1
+}
+```
+
+Also accepted: header `Idempotency-Key` instead of the body field.
+
+Success: `201` (new) or `200` with `"idempotent": true` (replay). Persist is durable before ack.
+
+Call Push **after** the local side effect succeeds (or in the same transactional outbox pattern this service already uses). Use a stable idempotency key per business event.
+
+---
+
+## Entitlements — `GET /v1/tenants/{id}/entitlements`
+
+Optional read model for UI / config screens. Same Bearer auth; only tenants bound to this service.
+
+---
+
+## Client sketch
+
+```text
+Check(ctx, tenant, accounts, action, meta) → { allowed, reason, decision_id, policy_id, policy_version }
+Push(ctx, tenant, accounts, action, meta, idempotency_key, decision?) → { event_id }
+```
+
+- HTTP timeouts via `context.Context`.
+- JSON in / JSON out; errors are `{ "error": { "code", "message" } }` with 4xx/5xx.
+- 401 → fix credentials; 403 → tenant not bound to this service; 400 → bad scope/action.
+
+---
+
+## Checklist
+
+1. Own thin HTTP client under `src/utils/licensing`; inject from composition root.
+2. `LICENSING_URL` + `LICENSING_API_KEY` from env/Vault only.
+3. Gate privileged work with Check; fail closed; default deny.
+4. Push usage with idempotency after success; optional link to `decision_id` / policy version.
+5. Never embed licensing Postgres, policy files, or Keycloak into this service for runtime checks.
+6. Never log API keys.
