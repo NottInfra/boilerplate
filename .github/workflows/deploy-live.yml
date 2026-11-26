@@ -85,7 +85,25 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 unit-test
+      # Direct make: release/*.ps1 unit-test needs powershell-yaml, Vault, and
+      # TUF-signed settings.cfg (same runner gaps as gitleaks). Run the Makefile
+      # targets the step would invoke; empty boilerplate trees without src/ skip.
+      - name: Run unit tests
+        run: |
+          set -euo pipefail
+          type=''
+          while IFS= read -r line; do
+            case "$line" in
+              type:*)
+                type=$(printf '%s\n' "$line" | sed -e 's/^type:[[:space:]]*//' -e 's/["'\'']//g' | tr '[:upper:]' '[:lower:]')
+                ;;
+            esac
+          done < project.cfg
+          case "$type" in
+            service) make test-docker ;;
+            package) make test ;;
+            *) echo "[!] project.cfg type must be service or package (got: ${type:-empty})"; exit 1 ;;
+          esac
 
   semgrep:
     needs: unit-test
