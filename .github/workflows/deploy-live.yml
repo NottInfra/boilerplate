@@ -9,6 +9,10 @@ on:
 
 permissions:
   contents: read
+  # Commit Statuses API: quality gates that poll /commits/{sha}/status hang
+  # forever when only Check Runs exist (state=pending, total_count=0). Post an
+  # explicit context so that endpoint becomes terminal after gated CI finishes.
+  statuses: write
 
 env:
   SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -323,3 +327,88 @@ jobs:
           "deploy=true" >> $env:GITHUB_OUTPUT
       - if: steps.deploy-check.outputs.deploy == 'true'
         run: pwsh ./release/${{ env.RELEASE_PIPELINE }}.ps1 deploy
+
+  # Posts a legacy commit status so GET /commits/{sha}/status is terminal.
+  # GitHub Actions only creates Check Runs by default; combined status stays
+  # pending with zero contexts, which caused prior agent quality gates to
+  # hit "context deadline exceeded" after CI was already green.
+  report-status:
+    if: always()
+    needs: [gitleaks, unit-test, semgrep, sonar, build, syft, grype, trivy, project]
+    runs-on: self-hosted
+    timeout-minutes: 5
+    steps:
+      - name: Post combined commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RESULT_GITLEAKS: ${{ needs.gitleaks.result }}
+          RESULT_UNIT: ${{ needs.unit-test.result }}
+          RESULT_SEMGREP: ${{ needs.semgrep.result }}
+          RESULT_SONAR: ${{ needs.sonar.result }}
+          RESULT_BUILD: ${{ needs.build.result }}
+          RESULT_PROJECT: ${{ needs.project.result }}
+          RESULT_SYFT: ${{ needs.syft.result }}
+          RESULT_GRYPE: ${{ needs.grype.result }}
+          RESULT_TRIVY: ${{ needs.trivy.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # Required gated jobs must succeed. Image scanners may be skipped
+          # when has_image=false; treat skipped as OK, failure as failure.
+          state=success
+          desc='gated CI passed'
+          for pair in \
+            "gitleaks:${RESULT_GITLEAKS}" \
+            "unit-test:${RESULT_UNIT}" \
+            "semgrep:${RESULT_SEMGREP}" \
+            "sonar:${RESULT_SONAR}" \
+            "build:${RESULT_BUILD}" \
+            "project:${RESULT_PROJECT}"; do
+            name="${pair%%:*}"
+            result="${pair#*:}"
+            case "$result" in
+              success) ;;
+              *)
+                state=failure
+                desc="gated CI failed: ${name}=${result}"
+                break
+                ;;
+            esac
+          done
+          if [ "$state" = success ]; then
+            for pair in \
+              "syft:${RESULT_SYFT}" \
+              "grype:${RESULT_GRYPE}" \
+              "trivy:${RESULT_TRIVY}"; do
+              name="${pair%%:*}"
+              result="${pair#*:}"
+              case "$result" in
+                success|skipped) ;;
+                *)
+                  state=failure
+                  desc="gated CI failed: ${name}=${result}"
+                  break
+                  ;;
+              esac
+            done
+          fi
+          echo "[+] report-status sha=${HEAD_SHA} state=${state} ${desc}"
+          export STATE="$state" DESC="$desc"
+          # Prefer gh; fall back to curl so self-hosted images without gh still work.
+          if command -v gh >/dev/null 2>&1; then
+            gh api "repos/${{ github.repository }}/statuses/${HEAD_SHA}" \
+              -f state="$state" \
+              -f context='ci/gated' \
+              -f description="$desc" \
+              -f target_url="$RUN_URL" >/dev/null
+          else
+            payload=$(python3 -c 'import json,os; print(json.dumps({"state":os.environ["STATE"],"context":"ci/gated","description":os.environ["DESC"][:140],"target_url":os.environ["RUN_URL"]}))')
+            curl -fsS -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${{ github.repository }}/statuses/${HEAD_SHA}" \
+              -d "$payload" \
+              -o /dev/null
+          fi
